@@ -42,7 +42,8 @@ There is a useful `bin/idf` wrapper script.
 
 If you want to monitor multiple devices at once -- install tmux.
 
-You must edit `bin/config.local` to set serial ports for your ESP32 boards, see below.
+Copy 'bin/config.local.example-linux' (works for Linux and Windows WSL) or 'bin/config.local.example-macos' to 'bin/config.local' and edit it.
+You have to configure serial ports for your ESP32 boards, see below.
 
 ## Set serial port paths
 
@@ -63,8 +64,10 @@ The same approach might work for some Linux distros.
 
 ### Linux and WSL
 
-Stable paths to serial ports can be formed using USB device serial numbers and /dev/serial/by-id/ prefix.
+If your boards have distinct serial numbers (not the case for cheap boards with counterfeit USB-to-serial transceiver chips), stable paths to serial ports can be formed using /dev/serial/by-id/ prefix.
 Copy bin/config.local.linux over bin/config.local and edit it, should be self-explanatory.
+
+If all your boards have same serial numbers, you will have to use full paths, see MacOS case above.
 
 ## Build and run
 
