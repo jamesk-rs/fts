@@ -124,7 +124,7 @@ static bool IRAM_ATTR dtr_tez_handler(mcpwm_timer_handle_t timer,
         if (s_state == DTR_STATE_RUNNING) {
             s_state = DTR_STATE_ALIGNED;
 
-#ifdef CONFIG_FTS_ROLE_SLAVE
+#if defined(CONFIG_FTS_ROLE_SLAVE) && !defined(CONFIG_FTS_PULSE_BEFORE_ALIGN)
             // Release GPIO force - allow hardware-generated pulses now that we're aligned
             mcpwm_generator_set_force_level(s_generator, -1, true);
 #endif
@@ -396,10 +396,10 @@ static esp_err_t s_init_hardware(gpio_num_t pulse_gpio, uint16_t init_period_tic
     ESP_ERROR_CHECK(mcpwm_generator_set_action_on_compare_event(s_generator,
                                                                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, s_comparator, MCPWM_GEN_ACTION_LOW)));
 
-#ifdef CONFIG_FTS_ROLE_SLAVE
+#if defined(CONFIG_FTS_ROLE_SLAVE) && !defined(CONFIG_FTS_PULSE_BEFORE_ALIGN)
     // Force GPIO LOW until slave timer is aligned
     ESP_ERROR_CHECK(mcpwm_generator_set_force_level(s_generator, 0, true));
-#endif // CONFIG_FTS_ROLE_SLAVE
+#endif // CONFIG_FTS_ROLE_SLAVE && !CONFIG_FTS_PULSE_BEFORE_ALIGN
 
     return ESP_OK;
 }

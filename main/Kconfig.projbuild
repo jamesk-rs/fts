@@ -50,6 +50,17 @@ menu "Time Synchronization Configuration"
             corrections from subsequent FTM measurements. Useful for validating
             alignment accuracy and clock stability.
 
+    config FTS_PULSE_BEFORE_ALIGN
+        bool "Enable Pulse Output Before Alignment (Slave)"
+        default n
+        depends on FTS_ROLE_SLAVE && FTS_ENABLE_GPIO
+        help
+            When enabled, slave outputs MCPWM pulses immediately after timer start,
+            before synchronization with master is acquired. By default, slave GPIO
+            is held LOW until alignment completes to avoid outputting unsynchronized
+            pulses. Enable this option if you need pulses running during the initial
+            sync acquisition phase.
+
     menu "Common Configuration"
         config FTS_AP_SSID
             string "AP SSID"
