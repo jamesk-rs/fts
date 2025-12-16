@@ -167,11 +167,15 @@ def cmd_analyze(args):
         metadata,
     )
 
-    # Generate period plots
+    # Generate period plots (combined and split views)
     plot_periods(periods_a, periods_b, args.sample_rate, times_a, times_b,
                  output_dir / "periods.png", args.pulse_freq)
     plot_period_histogram(periods_a, periods_b, output_dir / "period_histogram.png",
                           args.pulse_freq)
+    plot_periods(periods_a, periods_b, args.sample_rate, times_a, times_b,
+                 output_dir / "periods_split.png", args.pulse_freq, split=True)
+    plot_period_histogram(periods_a, periods_b, output_dir / "period_histogram_split.png",
+                          args.pulse_freq, split=True)
 
     # Generate pulse waveform plots (sample pulses from start, middle, end)
     # Edge times need to add skip offset to map back to original file positions
@@ -696,10 +700,13 @@ def analyze_cfile_streaming(args):
     plot_histogram(all_delays / 1e9, output_dir / 'histogram.png')
     plot_timeseries(all_delays / 1e9, sample_rate, all_times, output_dir / 'timeseries.png')
 
-    # Generate period plots
+    # Generate period plots (combined and split views)
     plot_periods(periods_a, periods_b, sample_rate, all_edge_times_a, all_edge_times_b,
                  output_dir / 'periods.png', pulse_freq)
     plot_period_histogram(periods_a, periods_b, output_dir / 'period_histogram.png', pulse_freq)
+    plot_periods(periods_a, periods_b, sample_rate, all_edge_times_a, all_edge_times_b,
+                 output_dir / 'periods_split.png', pulse_freq, split=True)
+    plot_period_histogram(periods_a, periods_b, output_dir / 'period_histogram_split.png', pulse_freq, split=True)
 
     # Generate pulse waveform plots (sample pulses from start, middle, end)
     # StreamingLinregDetector returns global sample indices (already accounts for skip)
@@ -722,12 +729,16 @@ def analyze_cfile_streaming(args):
     period_stats_a_dict = {
         'mean_us': period_stats_a.mean_us,
         'std_us': period_stats_a.std_us,
+        'min_us': period_stats_a.min_us,
+        'max_us': period_stats_a.max_us,
         'freq_hz': period_stats_a.freq_hz,
         'freq_ppm_error': period_stats_a.freq_ppm_error,
     }
     period_stats_b_dict = {
         'mean_us': period_stats_b.mean_us,
         'std_us': period_stats_b.std_us,
+        'min_us': period_stats_b.min_us,
+        'max_us': period_stats_b.max_us,
         'freq_hz': period_stats_b.freq_hz,
         'freq_ppm_error': period_stats_b.freq_ppm_error,
     }
@@ -1102,9 +1113,14 @@ def analyze_edge_files(args):
     # Generate period plots (using sampled periods with actual edge times)
     edge_times_a = np.array(edge_times_a_sampled)
     edge_times_b = np.array(edge_times_b_sampled)
+    # Combined (overlay) plots
     plot_periods(periods_a, periods_b, sample_rate, edge_times_a, edge_times_b,
                  output_dir / 'periods.png', pulse_freq)
     plot_period_histogram(periods_a, periods_b, output_dir / 'period_histogram.png', pulse_freq)
+    # Split (separate channel) plots
+    plot_periods(periods_a, periods_b, sample_rate, edge_times_a, edge_times_b,
+                 output_dir / 'periods_split.png', pulse_freq, split=True)
+    plot_period_histogram(periods_a, periods_b, output_dir / 'period_histogram_split.png', pulse_freq, split=True)
 
     # Create JitterStats for HTML report
     jitter_stats = JitterStats(
@@ -1122,12 +1138,16 @@ def analyze_edge_files(args):
     period_stats_a_dict = {
         'mean_us': mean_period_a_us,
         'std_us': period_stats_a.std,
+        'min_us': period_stats_a.min,
+        'max_us': period_stats_a.max,
         'freq_hz': freq_a,
         'freq_ppm_error': -ppm_error_a,  # Negative because longer period = lower freq
     }
     period_stats_b_dict = {
         'mean_us': mean_period_b_us,
         'std_us': period_stats_b.std,
+        'min_us': period_stats_b.min,
+        'max_us': period_stats_b.max,
         'freq_hz': freq_b,
         'freq_ppm_error': -ppm_error_b,
     }

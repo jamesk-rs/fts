@@ -133,12 +133,15 @@ class PeriodStats:
     count: int
     mean_us: float      # Mean period in microseconds
     std_us: float       # Std of period
+    min_us: float       # Min period in microseconds
+    max_us: float       # Max period in microseconds
     freq_hz: float      # Derived frequency
     freq_ppm_error: float  # Error from nominal in PPM
 
     def __str__(self) -> str:
         return (
             f"Period: {self.mean_us:.3f} ± {self.std_us:.3f} µs "
+            f"[{self.min_us:.3f}, {self.max_us:.3f}] "
             f"({self.freq_hz:.6f} Hz, {self.freq_ppm_error:+.1f} ppm)"
         )
 
@@ -186,6 +189,8 @@ def compute_period_stats(
         count=len(periods_seconds),
         mean_us=float(np.mean(periods_us)),
         std_us=float(np.std(periods_us)),
+        min_us=float(np.min(periods_us)),
+        max_us=float(np.max(periods_us)),
         freq_hz=float(measured_freq),
         freq_ppm_error=float(-freq_error_ppm),  # Negative because longer period = lower freq
     )

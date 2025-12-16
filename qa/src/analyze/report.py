@@ -276,6 +276,7 @@ def plot_period_histogram(
     output_path: Optional[str | Path] = None,
     nominal_freq: float = 2000.0,
     bins: int = 100,
+    split: bool = False,
 ) -> None:
     """
     Plot histogram of periods for both channels.
@@ -286,6 +287,7 @@ def plot_period_histogram(
         output_path: Optional path to save figure
         nominal_freq: Nominal pulse frequency in Hz
         bins: Number of histogram bins
+        split: If True, plot channels in separate subplots
     """
     import matplotlib.pyplot as plt
 
@@ -293,30 +295,53 @@ def plot_period_histogram(
     periods_b_us = periods_b * 1e6
     nominal_period_us = 1e6 / nominal_freq
 
-    fig, ax = plt.subplots(figsize=(10, 5))
+    if split:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
-    # Plot both histograms
-    ax.hist(periods_a_us, bins=bins, alpha=0.6, color='blue', label='Channel A', edgecolor='white')
-    ax.hist(periods_b_us, bins=bins, alpha=0.6, color='red', label='Channel B', edgecolor='white')
+        # Channel A - independent bins
+        ax1.hist(periods_a_us, bins=bins, alpha=0.8, color='blue', edgecolor='white')
+        ax1.axvline(nominal_period_us, color='green', linestyle='--', linewidth=2, label=f'Nominal')
+        ax1.axvline(np.mean(periods_a_us), color='blue', linestyle=':', linewidth=1.5, label='Mean')
+        ax1.set_xlabel("Period (µs)")
+        ax1.set_ylabel("Count")
+        ax1.set_title(f"Channel A: {np.mean(periods_a_us):.3f} ± {np.std(periods_a_us):.3f} µs [min={np.min(periods_a_us):.3f}, max={np.max(periods_a_us):.3f}]")
+        ax1.legend(loc='upper right')
+        ax1.grid(True, alpha=0.3)
 
-    # Add nominal and mean lines
-    ax.axvline(nominal_period_us, color='green', linestyle='--', linewidth=2, label=f'Nominal ({nominal_freq} Hz)')
-    ax.axvline(np.mean(periods_a_us), color='blue', linestyle=':', linewidth=1.5)
-    ax.axvline(np.mean(periods_b_us), color='red', linestyle=':', linewidth=1.5)
+        # Channel B - independent bins
+        ax2.hist(periods_b_us, bins=bins, alpha=0.8, color='red', edgecolor='white')
+        ax2.axvline(nominal_period_us, color='green', linestyle='--', linewidth=2, label=f'Nominal')
+        ax2.axvline(np.mean(periods_b_us), color='red', linestyle=':', linewidth=1.5, label='Mean')
+        ax2.set_xlabel("Period (µs)")
+        ax2.set_ylabel("Count")
+        ax2.set_title(f"Channel B: {np.mean(periods_b_us):.3f} ± {np.std(periods_b_us):.3f} µs [min={np.min(periods_b_us):.3f}, max={np.max(periods_b_us):.3f}]")
+        ax2.legend(loc='upper right')
+        ax2.grid(True, alpha=0.3)
+    else:
+        fig, ax = plt.subplots(figsize=(10, 5))
 
-    ax.set_xlabel("Period (µs)")
-    ax.set_ylabel("Count")
-    ax.set_title("Period Distribution")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+        # Plot both histograms
+        ax.hist(periods_a_us, bins=bins, alpha=0.6, color='blue', label='Channel A', edgecolor='white')
+        ax.hist(periods_b_us, bins=bins, alpha=0.6, color='red', label='Channel B', edgecolor='white')
 
-    # Add stats annotation
-    stats_text = (
-        f"A: {np.mean(periods_a_us):.3f} ± {np.std(periods_a_us):.3f} µs\n"
-        f"B: {np.mean(periods_b_us):.3f} ± {np.std(periods_b_us):.3f} µs"
-    )
-    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, verticalalignment='top',
-            fontfamily='monospace', fontsize=9, bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        # Add nominal and mean lines
+        ax.axvline(nominal_period_us, color='green', linestyle='--', linewidth=2, label=f'Nominal ({nominal_freq} Hz)')
+        ax.axvline(np.mean(periods_a_us), color='blue', linestyle=':', linewidth=1.5)
+        ax.axvline(np.mean(periods_b_us), color='red', linestyle=':', linewidth=1.5)
+
+        ax.set_xlabel("Period (µs)")
+        ax.set_ylabel("Count")
+        ax.set_title("Period Distribution")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # Add stats annotation
+        stats_text = (
+            f"A: {np.mean(periods_a_us):.3f} ± {np.std(periods_a_us):.3f} µs\n"
+            f"B: {np.mean(periods_b_us):.3f} ± {np.std(periods_b_us):.3f} µs"
+        )
+        ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, verticalalignment='top',
+                fontfamily='monospace', fontsize=9, bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
     plt.tight_layout()
 
@@ -337,6 +362,7 @@ def plot_periods(
     edge_times_b: np.ndarray,
     output_path: Optional[str | Path] = None,
     nominal_freq: float = 2000.0,
+    split: bool = False,
 ) -> None:
     """
     Plot period measurements for both channels to visualize frequency skew.
@@ -349,6 +375,7 @@ def plot_periods(
         edge_times_b: Edge times for channel B in samples
         output_path: Optional path to save figure (displays if None)
         nominal_freq: Nominal pulse frequency in Hz
+        split: If True, plot channels in separate subplots with independent y-axes
     """
     import matplotlib.pyplot as plt
 
@@ -367,30 +394,54 @@ def plot_periods(
     else:
         time_b = edge_times_b[1:len(periods_b)+1] / sample_rate
 
-    fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+    if split:
+        fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
-    # Period vs time for both channels
-    ax1 = axes[0]
-    ax1.plot(time_a, periods_a_us, 'b.', markersize=1, alpha=0.5, label='Channel A')
-    ax1.plot(time_b, periods_b_us, 'r.', markersize=1, alpha=0.5, label='Channel B')
-    ax1.axhline(nominal_period_us, color='green', linestyle='--', alpha=0.7, label=f'Nominal ({nominal_freq} Hz)')
-    ax1.set_ylabel("Period (µs)")
-    ax1.set_title("Pulse Period vs Time")
-    ax1.legend(loc='upper right')
-    ax1.grid(True, alpha=0.3)
+        # Channel A
+        ax1 = axes[0]
+        ax1.plot(time_a, periods_a_us, 'b.', markersize=1, alpha=0.5)
+        ax1.axhline(nominal_period_us, color='green', linestyle='--', alpha=0.7, label=f'Nominal')
+        ax1.axhline(np.mean(periods_a_us), color='blue', linestyle=':', alpha=0.7, label='Mean')
+        ax1.set_ylabel("Period (µs)")
+        ax1.set_title(f"Channel A: {np.mean(periods_a_us):.3f} ± {np.std(periods_a_us):.3f} µs [min={np.min(periods_a_us):.3f}, max={np.max(periods_a_us):.3f}]")
+        ax1.legend(loc='upper right')
+        ax1.grid(True, alpha=0.3)
 
-    # Period difference (B - A) to show skew
-    n = min(len(periods_a), len(periods_b))
-    period_diff_ns = (periods_b[:n] - periods_a[:n]) * 1e9
-    time_diff = time_a[:n]
+        # Channel B
+        ax2 = axes[1]
+        ax2.plot(time_b, periods_b_us, 'r.', markersize=1, alpha=0.5)
+        ax2.axhline(nominal_period_us, color='green', linestyle='--', alpha=0.7, label=f'Nominal')
+        ax2.axhline(np.mean(periods_b_us), color='red', linestyle=':', alpha=0.7, label='Mean')
+        ax2.set_xlabel("Time (s)")
+        ax2.set_ylabel("Period (µs)")
+        ax2.set_title(f"Channel B: {np.mean(periods_b_us):.3f} ± {np.std(periods_b_us):.3f} µs [min={np.min(periods_b_us):.3f}, max={np.max(periods_b_us):.3f}]")
+        ax2.legend(loc='upper right')
+        ax2.grid(True, alpha=0.3)
+    else:
+        fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
 
-    ax2 = axes[1]
-    ax2.plot(time_diff, period_diff_ns, 'purple', linewidth=0.5, alpha=0.7)
-    ax2.axhline(0, color='gray', linestyle='--', alpha=0.5)
-    ax2.set_xlabel("Time (s)")
-    ax2.set_ylabel("Period diff B-A (ns)")
-    ax2.set_title(f"Period Difference (mean: {np.mean(period_diff_ns):.2f} ns)")
-    ax2.grid(True, alpha=0.3)
+        # Period vs time for both channels
+        ax1 = axes[0]
+        ax1.plot(time_a, periods_a_us, 'b.', markersize=1, alpha=0.5, label='Channel A')
+        ax1.plot(time_b, periods_b_us, 'r.', markersize=1, alpha=0.5, label='Channel B')
+        ax1.axhline(nominal_period_us, color='green', linestyle='--', alpha=0.7, label=f'Nominal ({nominal_freq} Hz)')
+        ax1.set_ylabel("Period (µs)")
+        ax1.set_title("Pulse Period vs Time")
+        ax1.legend(loc='upper right')
+        ax1.grid(True, alpha=0.3)
+
+        # Period difference (B - A) to show skew
+        n = min(len(periods_a), len(periods_b))
+        period_diff_ns = (periods_b[:n] - periods_a[:n]) * 1e9
+        time_diff = time_a[:n]
+
+        ax2 = axes[1]
+        ax2.plot(time_diff, period_diff_ns, 'purple', linewidth=0.5, alpha=0.7)
+        ax2.axhline(0, color='gray', linestyle='--', alpha=0.5)
+        ax2.set_xlabel("Time (s)")
+        ax2.set_ylabel("Period diff B-A (ns)")
+        ax2.set_title(f"Period Difference (mean: {np.mean(period_diff_ns):.2f} ns)")
+        ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
 
@@ -652,6 +703,8 @@ def generate_html_report(
             <h3>Channel A Period</h3>
             <div class="stat-row"><span class="stat-label">Mean Period</span><span class="stat-value">{period_stats_a['mean_us']:.3f} µs</span></div>
             <div class="stat-row"><span class="stat-label">Std Dev</span><span class="stat-value">{period_stats_a['std_us']:.3f} µs</span></div>
+            <div class="stat-row"><span class="stat-label">Min</span><span class="stat-value">{period_stats_a.get('min_us', 0):.3f} µs</span></div>
+            <div class="stat-row"><span class="stat-label">Max</span><span class="stat-value">{period_stats_a.get('max_us', 0):.3f} µs</span></div>
             <div class="stat-row"><span class="stat-label">Frequency</span><span class="stat-value">{period_stats_a['freq_hz']:.6f} Hz</span></div>
             <div class="stat-row"><span class="stat-label">Error from Nominal</span><span class="stat-value">{period_stats_a['freq_ppm_error']:+.1f} ppm</span></div>
         </div>
@@ -662,6 +715,8 @@ def generate_html_report(
             <h3>Channel B Period</h3>
             <div class="stat-row"><span class="stat-label">Mean Period</span><span class="stat-value">{period_stats_b['mean_us']:.3f} µs</span></div>
             <div class="stat-row"><span class="stat-label">Std Dev</span><span class="stat-value">{period_stats_b['std_us']:.3f} µs</span></div>
+            <div class="stat-row"><span class="stat-label">Min</span><span class="stat-value">{period_stats_b.get('min_us', 0):.3f} µs</span></div>
+            <div class="stat-row"><span class="stat-label">Max</span><span class="stat-value">{period_stats_b.get('max_us', 0):.3f} µs</span></div>
             <div class="stat-row"><span class="stat-label">Frequency</span><span class="stat-value">{period_stats_b['freq_hz']:.6f} Hz</span></div>
             <div class="stat-row"><span class="stat-label">Error from Nominal</span><span class="stat-value">{period_stats_b['freq_ppm_error']:+.1f} ppm</span></div>
         </div>
@@ -729,6 +784,7 @@ def generate_html_report(
     html += '''    </div>
 
     <h2>Period Analysis</h2>
+    <h3>Combined View</h3>
     <div class="plot-row">
 '''
 
@@ -749,6 +805,28 @@ def generate_html_report(
 '''
 
     html += '''    </div>
+'''
+
+    # Split view (separate channels)
+    periods_split_data = embed_image('periods_split.png')
+    period_hist_split_data = embed_image('period_histogram_split.png')
+    if periods_split_data or period_hist_split_data:
+        html += '''    <h3>Split View (Separate Channels)</h3>
+    <div class="plot-row">
+'''
+        if periods_split_data:
+            html += f'''        <div class="plot-container">
+            <h3>Period vs Time (Split)</h3>
+            <img src="{periods_split_data}" alt="Period Timeseries Split">
+        </div>
+'''
+        if period_hist_split_data:
+            html += f'''        <div class="plot-container">
+            <h3>Period Distribution (Split)</h3>
+            <img src="{period_hist_split_data}" alt="Period Histogram Split">
+        </div>
+'''
+        html += '''    </div>
 '''
 
     # Add pulse waveforms section if available
