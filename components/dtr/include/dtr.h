@@ -1,7 +1,8 @@
 /**
  * DTR - Disciplined Timer Realtime
  *
- * MCPWM-based timer with ISR for synchronized operation.
+ * Timer with ISR for synchronized operation.
+ * Supports multiple backends (MCPWM, GPTimer) and multiple simultaneous instances.
  * Handles TEZ (timer empty) events and invokes application callback.
  */
 
@@ -11,6 +12,7 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "dtr_backend.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -70,6 +72,173 @@ typedef enum {
 typedef void (*fts_callback_t)(uint32_t master_cycle);
 
 /**
+ * Alignment feedback structure (returned by dtr_grab_n_log_align_feedback)
+ * Reports DELTAS per Slide 23: cycle_counter - old_cycle_counter, period_ticks - old_period_ticks
+ */
+typedef struct {
+    bool ready;                 // True if ISR has updated the feedback
+    int64_t cycle_counter;      // Current cycle_counter after alignment
+    int32_t cycle_delta;        // cycle_counter - old_cycle_counter (normally 1)
+    int32_t period_ticks;       // New period_ticks (the jump period)
+    int32_t period_ticks_delta; // period_ticks - old_period_ticks (normally ~0)
+} align_feedback_t;
+
+// ============================================================================
+// Instance-based API (supports multiple simultaneous timers)
+// ============================================================================
+
+/**
+ * DTR instance structure
+ * Contains all state for a single timer instance.
+ * Defined here to allow stack allocation; treat fields as private.
+ */
+struct dtr_instance_s {
+    // Backend
+    const dtr_backend_ops_t *ops;
+    void *backend_data;  // Backend-specific handle storage
+
+    // Configuration
+    dtr_mode_t mode;
+    gpio_num_t pulse_gpio;
+
+    // State machine
+    dtr_state_t state;
+
+    // Cycle and tick counters
+    int64_t cycle_counter;
+    int64_t timer_base_ticks;
+    int64_t period_ticks;
+
+    // Period dithering (fixed-point)
+    uint32_t base_period_fp16;
+    int32_t period_ticks_frac_acc;
+
+    // Shadow register tracking (MCPWM-specific semantics but useful for all)
+    uint16_t active_period_ticks;
+    uint16_t shadow_period_ticks;
+
+    // Alignment request (from DTC to ISR)
+    struct {
+        bool pending;
+        int64_t aligned_local_ticks;
+        int64_t aligned_cycle_counter;
+        int64_t aligned_base_period_fp16;
+    } align_request;
+
+    // Alignment feedback (from ISR to DTC)
+    align_feedback_t align_feedback;
+
+    // First aligned period flag (pulse suppressed during stretch)
+    bool first_aligned_period;
+
+    // Application callback
+    fts_callback_t app_callback;
+
+    // Task handle for TEZ notifications
+    TaskHandle_t tez_listener_task;
+
+    // Spinlock for ISR synchronization
+    portMUX_TYPE spinlock;
+};
+
+/**
+ * Create and initialize a DTR instance
+ *
+ * @param backend Backend type to use
+ * @param mode Master or slave mode
+ * @param callback Application callback (invoked in ISR!)
+ * @param pulse_gpio GPIO pin for hardware pulse generation
+ * @return Pointer to instance, or NULL on failure
+ */
+dtr_instance_t *dtr_create(dtr_backend_type_t backend, dtr_mode_t mode,
+                           fts_callback_t callback, gpio_num_t pulse_gpio);
+
+/**
+ * Destroy a DTR instance and release resources
+ *
+ * @param inst Instance to destroy
+ */
+void dtr_destroy(dtr_instance_t *inst);
+
+/**
+ * Start timer in free-running mode (instance API)
+ *
+ * @param inst DTR instance
+ */
+void dtr_start_timer_inst(dtr_instance_t *inst);
+
+/**
+ * Align timer to MAC clock epoch boundaries - master mode only (instance API)
+ *
+ * @param inst DTR instance
+ */
+void dtr_align_master_timer_inst(dtr_instance_t *inst);
+
+/**
+ * Set alignment parameters (instance API)
+ *
+ * @param inst DTR instance
+ * @param aligned_cycle_counter Target master cycle value
+ * @param aligned_local_ticks Target local tick value
+ * @param aligned_base_period_fp16 New timer period in FP16
+ */
+void dtr_set_align_request_inst(dtr_instance_t *inst,
+                                int64_t aligned_cycle_counter,
+                                int64_t aligned_local_ticks,
+                                int64_t aligned_base_period_fp16);
+
+/**
+ * Wait for TEZ event (instance API)
+ *
+ * @param inst DTR instance
+ */
+void dtr_wait_for_tez_inst(dtr_instance_t *inst);
+
+/**
+ * Get and log alignment feedback (instance API)
+ *
+ * @param inst DTR instance
+ */
+void dtr_grab_n_log_align_feedback_inst(dtr_instance_t *inst);
+
+/**
+ * Get current local ticks (instance API)
+ *
+ * @param inst DTR instance
+ * @return Current local tick count
+ */
+int64_t dtr_get_timer_base_ticks_inst(dtr_instance_t *inst);
+
+/**
+ * Register task handle for TEZ notifications (instance API)
+ *
+ * @param inst DTR instance
+ * @param task_handle Task handle to notify on TEZ
+ */
+void dtr_register_tez_listener_inst(dtr_instance_t *inst, TaskHandle_t task_handle);
+
+/**
+ * Read timer counter directly (instance API)
+ *
+ * @param inst DTR instance
+ * @return Current counter value
+ */
+uint32_t dtr_read_timer_count_inst(dtr_instance_t *inst);
+
+/**
+ * Core period handler - called by backends at each period boundary
+ * Implements the DTR state machine logic.
+ *
+ * @param inst DTR instance
+ * @return true if higher-priority task was woken, false otherwise
+ */
+bool dtr_core_period_handler(dtr_instance_t *inst);
+
+// ============================================================================
+// Static API (backward compatibility - uses default instance)
+// ============================================================================
+
+/**
  * Initialize DTR module
  *
  * @param mode Master or slave mode
@@ -92,18 +261,6 @@ void dtr_start_timer(void);
  * Must be called after dtr_start_timer()
  */
 void dtr_align_master_timer(void);
-
-/**
- * Alignment feedback structure (returned by dtr_grab_n_log_align_feedback)
- * Reports DELTAS per Slide 23: cycle_counter - old_cycle_counter, period_ticks - old_period_ticks
- */
-typedef struct {
-    bool ready;                 // True if ISR has updated the feedback
-    int64_t cycle_counter;      // Current cycle_counter after alignment
-    int32_t cycle_delta;        // cycle_counter - old_cycle_counter (normally 1)
-    int32_t period_ticks;       // New period_ticks (the jump period)
-    int32_t period_ticks_delta; // period_ticks - old_period_ticks (normally ~0)
-} align_feedback_t;
 
 /**
  * Set alignment parameters (called by DTC)

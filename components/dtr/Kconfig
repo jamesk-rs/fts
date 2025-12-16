@@ -1,0 +1,20 @@
+menu "DTR Timer Configuration"
+
+    config DTR_BACKEND_MCPWM
+        bool "Enable MCPWM timer backend"
+        depends on SOC_MCPWM_SUPPORTED
+        default y if SOC_MCPWM_SUPPORTED
+        help
+            Enable MCPWM-based timer backend. MCPWM provides hardware PWM
+            pulse generation with shadow registers. Preferred on chips that
+            support it (ESP32, ESP32-S3).
+
+    config DTR_BACKEND_GPTIMER
+        bool "Enable GPTimer timer backend"
+        default y
+        help
+            Enable GPTimer-based timer backend. Uses software GPIO toggle
+            for pulse generation. Available on all ESP32 chips. Adequate
+            for 2kHz operation.
+
+endmenu
