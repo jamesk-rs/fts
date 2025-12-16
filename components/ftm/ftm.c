@@ -8,6 +8,7 @@
 #include "ftm.h"
 #include "crm.h"
 #include "clock.h"
+#include <limits.h>
 #include "esp_wifi.h"
 #include "esp_private/wifi.h"
 #include "esp_event.h"
@@ -54,6 +55,22 @@ typedef struct __attribute__((packed)) {
 } ftm_sync_packet_t;
 
 // ============================================================================
+// FTM Session Statistics
+// ============================================================================
+
+typedef struct {
+    uint32_t session;        // Session number
+    unsigned short status;   // FTM status code
+    uint8_t count;           // Entry count
+    int64_t rtt_avg_ps;      // RTT average in picoseconds
+    int64_t rtt_min_ps;      // RTT minimum
+    int64_t rtt_max_ps;      // RTT maximum
+    int32_t rssi_avg;        // RSSI average
+    int8_t rssi_min;         // RSSI minimum
+    int8_t rssi_max;         // RSSI maximum
+} ftm_stats_t;
+
+// ============================================================================
 // Static state
 // ============================================================================
 
@@ -72,6 +89,7 @@ static uint8_t s_ap_channel = 0;
 static uint32_t s_ftm_session_number = 0;
 static wifi_ftm_report_entry_t s_ftm_report_buffer[FTM_REPORT_MAX_ENTRIES];
 static uint8_t s_ftm_report_count = 0;
+static unsigned short s_ftm_status = FTM_STATUS_SUCCESS;
 
 // Static unwrapped timestamp buffers
 static int64_t s_t1_ps[FTM_REPORT_MAX_ENTRIES];
@@ -263,8 +281,9 @@ static void ftm_event_handler(void *arg, esp_event_base_t event_base,
 {
     if (event_id == WIFI_EVENT_FTM_REPORT) {
         wifi_event_ftm_report_t *event = (wifi_event_ftm_report_t *)event_data;
+        s_ftm_status = event->status;
 
-        if (event->status == FTM_STATUS_SUCCESS && event->ftm_report_num_entries > 0) {
+        if (s_ftm_status == FTM_STATUS_SUCCESS && event->ftm_report_num_entries > 0) {
             uint8_t num_entries = event->ftm_report_num_entries;
 
             if (num_entries > FTM_REPORT_MAX_ENTRIES) {
@@ -282,39 +301,94 @@ static void ftm_event_handler(void *arg, esp_event_base_t event_base,
             s_ftm_report_count = num_entries;
             xEventGroupSetBits(s_ftm_event_group, FTM_REPORT_BIT);
         } else {
-            ESP_LOGW(TAG, "FTM failed: status=%d", event->status);
             xEventGroupSetBits(s_ftm_event_group, FTM_FAILURE_BIT);
         }
     }
 }
 
 /**
- * Process FTM report: unwrap timestamps and pass to CRM
+ * Process FTM report: unwrap timestamps, calculate statistics, and pass to CRM
  */
 static void process_ftm_report(unwrap_state_t *t1_unwrap, unwrap_state_t *t2_unwrap,
-                                unwrap_state_t *t3_unwrap, unwrap_state_t *t4_unwrap)
+                                unwrap_state_t *t3_unwrap, unwrap_state_t *t4_unwrap,
+                                ftm_stats_t *stats)
 {
     if (s_ftm_report_count == 0) {
-        ESP_LOGE(TAG, "No FTM report to process");
         return;
     }
 
-    uint32_t session = ++s_ftm_session_number;
+    // Statistics accumulators
+    int64_t rtt_sum_ps = 0;
+    int64_t rtt_min_ps = INT64_MAX;
+    int64_t rtt_max_ps = INT64_MIN;
+    int32_t rssi_sum = 0;
+    int8_t rssi_min = INT8_MAX;
+    int8_t rssi_max = INT8_MIN;
 
     for (uint8_t i = 0; i < s_ftm_report_count; i++) {
         s_t1_ps[i] = clock_unwrap(s_ftm_report_buffer[i].t1, t1_unwrap);
         s_t2_ps[i] = clock_unwrap(s_ftm_report_buffer[i].t2, t2_unwrap);
         s_t3_ps[i] = clock_unwrap(s_ftm_report_buffer[i].t3, t3_unwrap);
         s_t4_ps[i] = clock_unwrap(s_ftm_report_buffer[i].t4, t4_unwrap);
+
+        // Calculate RTT for this entry: (t4 - t1) - (t3 - t2)
+        int64_t rtt_ps = (s_t4_ps[i] - s_t1_ps[i]) - (s_t3_ps[i] - s_t2_ps[i]);
+        rtt_sum_ps += rtt_ps;
+        if (rtt_ps < rtt_min_ps) rtt_min_ps = rtt_ps;
+        if (rtt_ps > rtt_max_ps) rtt_max_ps = rtt_ps;
+
+        // Collect RSSI
+        int8_t rssi = s_ftm_report_buffer[i].rssi;
+        rssi_sum += rssi;
+        if (rssi < rssi_min) rssi_min = rssi;
+        if (rssi > rssi_max) rssi_max = rssi;
     }
 
-    crm_process_ftm_report(session, s_t1_ps, s_t2_ps, s_t3_ps, s_t4_ps, s_ftm_report_count);
-    s_ftm_report_count = 0;
+    // Populate stats
+    stats->rtt_avg_ps = rtt_sum_ps / s_ftm_report_count;
+    stats->rtt_min_ps = rtt_min_ps;
+    stats->rtt_max_ps = rtt_max_ps;
+    stats->rssi_avg = rssi_sum / s_ftm_report_count;
+    stats->rssi_min = rssi_min;
+    stats->rssi_max = rssi_max;
+
+    crm_process_ftm_report(s_ftm_session_number, s_t1_ps, s_t2_ps, s_t3_ps, s_t4_ps, s_ftm_report_count);
 }
 
 // ============================================================================
 // FTM Poll Task
 // ============================================================================
+
+/**
+ * Log FTM session statistics (CSV and console)
+ */
+static void log_ftm_stats(const ftm_stats_t *stats)
+{
+    if (stats->count > 0) {
+#ifdef CONFIG_FTS_CSV_OUTPUT
+        printf("FTM,%lu,%u,%u,%.1f,%.1f,%.1f,%ld,%d,%d\n",
+               (unsigned long)s_ftm_session_number,
+               stats->status,
+               stats->count,
+               (double)stats->rtt_avg_ps / 1000.0,
+               (double)stats->rtt_min_ps / 1000.0,
+               (double)stats->rtt_max_ps / 1000.0,
+               (long)stats->rssi_avg, stats->rssi_min, stats->rssi_max);
+#endif
+        ESP_LOGI(TAG, "FTM #%lu: %u/%u entries, RTT avg=%.1fns [%.1f,%.1f], RSSI avg=%ld [%d, %d]",
+                 (unsigned long)s_ftm_session_number,
+                 stats->count, FTM_FRAMES_PER_SESSION,
+                 (double)stats->rtt_avg_ps / 1000.0,
+                 (double)stats->rtt_min_ps / 1000.0,
+                 (double)stats->rtt_max_ps / 1000.0,
+                 (long)stats->rssi_avg, stats->rssi_min, stats->rssi_max);
+    } else {
+#ifdef CONFIG_FTS_CSV_OUTPUT
+        printf("FTM,%lu,%u,0,,,,,,\n", (unsigned long)s_ftm_session_number, stats->status);
+#endif
+        ESP_LOGE(TAG, "FTM #%lu: status=%u (error/timeout)", (unsigned long)s_ftm_session_number, stats->status);
+    }
+}
 
 /**
  * FTM poll task - runs FTM sessions periodically
@@ -338,6 +412,9 @@ static void ftm_poll_task(void *pvParameters)
     unwrap_state_t t3_unwrap = {0, 0, 0, WRAP_32BIT_1E6, 0};
     unwrap_state_t t4_unwrap = {0, 0, 0, WRAP_48BIT, WRAP2_T1_T4};
 
+    // Session statistics
+    ftm_stats_t stats = {0};
+
     // Track run_id for passive monitoring (warnings only)
     uint32_t last_seen_run_id = 0;
 
@@ -350,6 +427,9 @@ static void ftm_poll_task(void *pvParameters)
             continue;
         }
 
+        // FTM session started - increment session number
+        ++s_ftm_session_number;
+
         // Wait for FTM report
         EventBits_t bits = xEventGroupWaitBits(s_ftm_event_group,
                                                FTM_REPORT_BIT | FTM_FAILURE_BIT,
@@ -358,12 +438,18 @@ static void ftm_poll_task(void *pvParameters)
 
         // Process FTM report if received
         if (bits & FTM_REPORT_BIT) {
-            process_ftm_report(&t1_unwrap, &t2_unwrap, &t3_unwrap, &t4_unwrap);
+            process_ftm_report(&t1_unwrap, &t2_unwrap, &t3_unwrap, &t4_unwrap, &stats);
+            stats.count = s_ftm_report_count;
         } else if (bits & FTM_FAILURE_BIT) {
-            ESP_LOGE(TAG, "FTM session failed");
+            stats.count = 0;
+            stats.status = s_ftm_status;
         } else {
-            ESP_LOGE(TAG, "FTM session timeout");
+            stats.count = 0;
+            stats.status = -100; // Timeout
         }
+        log_ftm_stats(&stats);
+
+        s_ftm_report_count = 0;
 
         // Wait before next session
         vTaskDelay(pdMS_TO_TICKS(FTM_PERIOD_MS));
@@ -537,6 +623,10 @@ esp_err_t ftm_slave_init(const char *master_ssid, const char *master_password)
     ESP_ERROR_CHECK(ftm_sync_slave_init());
 
     ESP_ERROR_CHECK(esp_wifi_connect());
+
+#ifdef CONFIG_FTS_CSV_OUTPUT
+    printf("FTM,session,status,entries,rtt_avg_ns,rtt_min_ns,rtt_max_ns,rssi_avg,rssi_min,rssi_max\n");
+#endif
 
     return ESP_OK;
 }
