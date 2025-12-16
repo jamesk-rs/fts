@@ -833,6 +833,19 @@ def analyze_edge_files(args):
         print("Error: No edges to analyze")
         return 1
 
+    def find_edge_index_at_time(reader: EdgeFileReader, target_time: float) -> int:
+        """Binary search for first edge >= target_time."""
+        chunk_size = 100000
+        offset = 0
+        while True:
+            batch = reader.read_range(offset, offset + chunk_size)
+            if len(batch) == 0:
+                return offset
+            if batch['time'][-1] >= target_time:
+                idx = np.searchsorted(batch['time'], target_time)
+                return offset + idx
+            offset += len(batch)
+
     # Auto-detect common start time (handle late-starting channels)
     edges_ref_first = reader_ref.read_range(0, 1)
     edges_target_first = reader_target.read_range(0, 1)
@@ -841,9 +854,15 @@ def analyze_edge_files(args):
     common_start = max(start_ref, start_target)
 
     skip_seconds = 0.0
+    ref_start_idx = 0
+    target_start_idx = 0
     if common_start > min(start_ref, start_target):
         skip_seconds = (common_start - min(start_ref, start_target)) / sample_rate
+        # Find starting edge indices to ensure temporal alignment
+        ref_start_idx = find_edge_index_at_time(reader_ref, common_start)
+        target_start_idx = find_edge_index_at_time(reader_target, common_start)
         print(f"  Auto-skipping {skip_seconds:.3f}s to align channels")
+        print(f"  Starting at: ref idx {ref_start_idx}, target idx {target_start_idx}")
 
     # Compute max delay threshold (10% of period)
     period_ns = 1e9 / pulse_freq
@@ -893,9 +912,9 @@ def analyze_edge_files(args):
     total_target_filtered = 0
 
     with DelayFileWriter(delay_file) as delay_writer:
-        # Read edges in batches - both channels simultaneously
-        ref_iter = reader_ref.iter_batches(batch_size=BATCH_SIZE)
-        target_iter = reader_target.iter_batches(batch_size=BATCH_SIZE)
+        # Read edges in batches - both channels starting from common_start time
+        ref_iter = reader_ref.iter_batches(batch_size=BATCH_SIZE, start_edge=ref_start_idx)
+        target_iter = reader_target.iter_batches(batch_size=BATCH_SIZE, start_edge=target_start_idx)
 
         # Buffers for unmatched edges across batches
         ref_buffer = np.array([], dtype=np.float64)
@@ -911,15 +930,11 @@ def analyze_edge_files(args):
             except StopIteration:
                 target_batch = np.array([], dtype=reader_target.DTYPE)
 
-            # Filter by edge type
+            # Filter by edge type (no time filtering needed - already started at common_start)
             ref_mask = ref_batch['type'] == edge_type
             target_mask = target_batch['type'] == edge_type
             ref_times_batch = ref_batch['time'][ref_mask]
             target_times_batch = target_batch['time'][target_mask]
-
-            # Skip edges before common start time (handle late-starting channels)
-            ref_times_batch = ref_times_batch[ref_times_batch >= common_start]
-            target_times_batch = target_times_batch[target_times_batch >= common_start]
 
             total_ref_filtered += len(ref_times_batch)
             total_target_filtered += len(target_times_batch)
