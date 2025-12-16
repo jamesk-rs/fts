@@ -322,6 +322,11 @@ def detect_crossings_dual(
 
 # Streaming threshold crossing detection
 
+# Edge type constants for crossing detector (must match edgeio.edges)
+_CROSSING_EDGE_RISING = 0
+_CROSSING_EDGE_FALLING = 1
+
+
 @nb.njit
 def detect_crossings_streaming(
     x: np.ndarray,
@@ -331,9 +336,12 @@ def detect_crossings_streaming(
     sample_offset: int,
     threshold: float = DEFAULT_THRESHOLD,
     min_distance: int = DEFAULT_MIN_DISTANCE,
-) -> tuple[np.ndarray, np.ndarray, int, int, np.ndarray]:
+) -> tuple[np.ndarray, int, int, np.ndarray]:
     """
     Streaming threshold crossing detection with state preserved across buffer boundaries.
+
+    Returns edges in detection order as Nx2 array: [[time, type], ...].
+    Edge types: 0=rising, 1=falling.
 
     Prepends tail sample from previous buffer to handle crossings at boundaries.
     Returns updated state for next buffer.
@@ -349,8 +357,7 @@ def detect_crossings_streaming(
 
     Returns:
         Tuple of:
-        - rising_times: Global sample times of rising edges (float64)
-        - falling_times: Global sample times of falling edges (float64)
+        - edges: Nx2 array of (time, type) in detection order
         - new_last_rising_idx: Updated last rising edge index
         - new_last_falling_idx: Updated last falling edge index
         - new_tail: Tail sample to preserve for next call
@@ -370,15 +377,16 @@ def detect_crossings_streaming(
     if N < 2:
         new_tail = x64[-1:] if len(x64) >= 1 else x64.copy()
         return (
-            np.empty(0, dtype=np.float64),
-            np.empty(0, dtype=np.float64),
+            np.empty((0, 2), dtype=np.float64),
             last_rising_idx,
             last_falling_idx,
             new_tail,
         )
 
-    rising = []
-    falling = []
+    # Pre-allocate edges array (max = 2 edges per min_distance samples)
+    max_edges = 2 * N // min_distance + 2
+    edges = np.empty((max_edges, 2), dtype=np.float64)
+    edge_count = 0
     neg_threshold = -threshold
 
     for i in range(1, N):
@@ -398,7 +406,9 @@ def detect_crossings_streaming(
                     crossing = float(global_idx - 1) + frac
                 else:
                     crossing = float(global_idx)
-                rising.append(crossing)
+                edges[edge_count, 0] = crossing
+                edges[edge_count, 1] = float(_CROSSING_EDGE_RISING)
+                edge_count += 1
                 last_rising_idx = global_idx
 
         # Falling edge: signal crosses positive threshold going up
@@ -411,15 +421,16 @@ def detect_crossings_streaming(
                     crossing = float(global_idx - 1) + frac
                 else:
                     crossing = float(global_idx)
-                falling.append(crossing)
+                edges[edge_count, 0] = crossing
+                edges[edge_count, 1] = float(_CROSSING_EDGE_FALLING)
+                edge_count += 1
                 last_falling_idx = global_idx
 
     # Preserve last sample for next buffer (use float64 for consistency)
     new_tail = x64[-1:].copy()
 
     return (
-        np.array(rising, dtype=np.float64),
-        np.array(falling, dtype=np.float64),
+        edges[:edge_count],
         last_rising_idx,
         last_falling_idx,
         new_tail,
@@ -440,7 +451,8 @@ class StreamingCrossingDetector:
         detector = StreamingCrossingDetector(threshold=0.4, min_distance=2000)
         for chunk in stream:
             edges = detector.process(chunk)
-            # edges contains {'rising': [...], 'falling': [...]}
+            # edges is Nx2 array: [[time, type], ...]
+            # type: 0=rising, 1=falling
     """
 
     def __init__(
@@ -468,7 +480,7 @@ class StreamingCrossingDetector:
         self._skipped = False
         self._jit_warm = False
 
-    def process(self, x: np.ndarray) -> dict:
+    def process(self, x: np.ndarray) -> np.ndarray:
         """
         Process a chunk of samples and return detected edges.
 
@@ -476,10 +488,11 @@ class StreamingCrossingDetector:
             x: Signal samples for this chunk (single channel)
 
         Returns:
-            Dict with 'rising' and 'falling' (float64 arrays)
-            Times are global sample indices (not relative to chunk)
+            Nx2 array of edges: [[time, type], ...]
+            Times are global sample indices, type: 0=rising, 1=falling
         """
         chunk_len = len(x)
+        empty_edges = np.empty((0, 2), dtype=np.float64)
 
         # Phase 1: Skip initial samples (but use them for JIT warmup!)
         if not self._skipped:
@@ -499,8 +512,7 @@ class StreamingCrossingDetector:
             if self._sample_offset + chunk_len <= self.skip_samples:
                 # Entire chunk is within skip region
                 self._sample_offset += chunk_len
-                return {'rising': np.array([], dtype=np.float64),
-                        'falling': np.array([], dtype=np.float64)}
+                return empty_edges
             else:
                 # Partial skip - trim the beginning
                 skip_in_chunk = self.skip_samples - self._sample_offset
@@ -520,15 +532,14 @@ class StreamingCrossingDetector:
                 if settle_idx is None:
                     # No settle point found in this chunk
                     self._sample_offset += len(x)
-                    return {'rising': np.array([], dtype=np.float64),
-                            'falling': np.array([], dtype=np.float64)}
+                    return empty_edges
                 # Found settle point - trim and continue
                 x = x[settle_idx:]
                 self._sample_offset += settle_idx
             self._settled = True
 
         # Phase 3: Normal detection
-        rising, falling, self._last_rising, self._last_falling, self._tail = \
+        edges, self._last_rising, self._last_falling, self._tail = \
             detect_crossings_streaming(
                 x,
                 self._last_rising,
@@ -541,10 +552,7 @@ class StreamingCrossingDetector:
 
         self._sample_offset += len(x)
 
-        return {
-            'rising': rising,
-            'falling': falling,
-        }
+        return edges
 
     def _find_settle_point(self, x: np.ndarray) -> int | None:
         """Find first sample within reset window (signal settled)."""
@@ -799,6 +807,11 @@ def detect_edges_linreg_dual(
 LINREG_TAIL_SIZE = 20  # Need more tail for peak search
 
 
+# Edge type constants (must match edgeio.edges)
+EDGE_TYPE_RISING = 0
+EDGE_TYPE_FALLING = 1
+
+
 @nb.njit
 def detect_edges_linreg_streaming(
     x: np.ndarray,
@@ -811,9 +824,12 @@ def detect_edges_linreg_streaming(
     low_pct: float = DEFAULT_LOW_PCT,
     high_pct: float = DEFAULT_HIGH_PCT,
     min_distance: int = DEFAULT_MIN_DISTANCE,
-) -> tuple[np.ndarray, np.ndarray, int, int, np.ndarray]:
+) -> tuple[np.ndarray, int, int, np.ndarray]:
     """
     Streaming linear regression edge detection.
+
+    Returns edges in detection order as Nx2 array: [[time, type], ...].
+    Edge types: 0=rising, 1=falling.
 
     Same algorithm as detect_edges_linreg but handles buffer boundaries.
     Works with float32 input (from complex64.real) - no type conversion needed.
@@ -830,15 +846,16 @@ def detect_edges_linreg_streaming(
     if N < peak_search + 2:
         new_tail = x[-LINREG_TAIL_SIZE:].copy() if len(x) >= LINREG_TAIL_SIZE else x.copy()
         return (
-            np.empty(0, dtype=np.float64),
-            np.empty(0, dtype=np.float64),
+            np.empty((0, 2), dtype=np.float64),
             last_rising_idx,
             last_falling_idx,
             new_tail,
         )
 
-    rising = []
-    falling = []
+    # Pre-allocate edges array (max = 2 edges per min_distance samples)
+    max_edges = 2 * N // min_distance + 2
+    edges = np.empty((max_edges, 2), dtype=np.float64)
+    edge_count = 0
 
     max_pts = peak_search + 5
     edge_x = np.empty(max_pts, dtype=np.float64)
@@ -880,10 +897,14 @@ def detect_edges_linreg_streaming(
 
                 if n_pts >= 2:
                     crossing = _linreg_crossing(edge_x[:n_pts], edge_y[:n_pts], level_50)
-                    rising.append(crossing)
+                    edges[edge_count, 0] = crossing
+                    edges[edge_count, 1] = float(EDGE_TYPE_RISING)
+                    edge_count += 1
                     last_rising_idx = global_idx
                 elif n_pts == 1:
-                    rising.append(edge_x[0])
+                    edges[edge_count, 0] = edge_x[0]
+                    edges[edge_count, 1] = float(EDGE_TYPE_RISING)
+                    edge_count += 1
                     last_rising_idx = global_idx
 
         # Falling edge
@@ -915,10 +936,14 @@ def detect_edges_linreg_streaming(
 
                 if n_pts >= 2:
                     crossing = _linreg_crossing(edge_x[:n_pts], edge_y[:n_pts], level_50)
-                    falling.append(crossing)
+                    edges[edge_count, 0] = crossing
+                    edges[edge_count, 1] = float(EDGE_TYPE_FALLING)
+                    edge_count += 1
                     last_falling_idx = global_idx
                 elif n_pts == 1:
-                    falling.append(edge_x[0])
+                    edges[edge_count, 0] = edge_x[0]
+                    edges[edge_count, 1] = float(EDGE_TYPE_FALLING)
+                    edge_count += 1
                     last_falling_idx = global_idx
 
         i += 1
@@ -927,8 +952,7 @@ def detect_edges_linreg_streaming(
     new_tail = x[-LINREG_TAIL_SIZE:].copy() if len(x) >= LINREG_TAIL_SIZE else x.copy()
 
     return (
-        np.array(rising, dtype=np.float64),
-        np.array(falling, dtype=np.float64),
+        edges[:edge_count],
         last_rising_idx,
         last_falling_idx,
         new_tail,
@@ -949,7 +973,8 @@ class StreamingLinregDetector:
         detector = StreamingLinregDetector(trigger_threshold=0.4)
         for chunk in stream:
             edges = detector.process(chunk)
-            # edges contains {'rising': [...], 'falling': [...]}
+            # edges is Nx2 array: [[time, type], ...]
+            # type: 0=rising, 1=falling
     """
 
     def __init__(
@@ -983,7 +1008,7 @@ class StreamingLinregDetector:
         self._skipped = False
         self._jit_warm = False
 
-    def process(self, x: np.ndarray) -> dict:
+    def process(self, x: np.ndarray) -> np.ndarray:
         """
         Process a chunk of samples and return detected edges.
 
@@ -991,10 +1016,11 @@ class StreamingLinregDetector:
             x: Signal samples for this chunk (single channel)
 
         Returns:
-            Dict with 'rising' and 'falling' (float64 arrays)
-            Times are global sample indices
+            Nx2 array of edges: [[time, type], ...]
+            Times are global sample indices, type: 0=rising, 1=falling
         """
         chunk_len = len(x)
+        empty_edges = np.empty((0, 2), dtype=np.float64)
 
         # Phase 1: Skip initial samples (but use them for JIT warmup!)
         if not self._skipped:
@@ -1017,8 +1043,7 @@ class StreamingLinregDetector:
 
             if self._sample_offset + chunk_len <= self.skip_samples:
                 self._sample_offset += chunk_len
-                return {'rising': np.array([], dtype=np.float64),
-                        'falling': np.array([], dtype=np.float64)}
+                return empty_edges
             else:
                 skip_in_chunk = self.skip_samples - self._sample_offset
                 if skip_in_chunk > 0:
@@ -1036,14 +1061,13 @@ class StreamingLinregDetector:
                 settle_idx = self._find_settle_point(x)
                 if settle_idx is None:
                     self._sample_offset += len(x)
-                    return {'rising': np.array([], dtype=np.float64),
-                            'falling': np.array([], dtype=np.float64)}
+                    return empty_edges
                 x = x[settle_idx:]
                 self._sample_offset += settle_idx
             self._settled = True
 
         # Phase 3: Detection
-        rising, falling, self._last_rising, self._last_falling, self._tail = \
+        edges, self._last_rising, self._last_falling, self._tail = \
             detect_edges_linreg_streaming(
                 x,
                 self._last_rising,
@@ -1059,10 +1083,7 @@ class StreamingLinregDetector:
 
         self._sample_offset += len(x)
 
-        return {
-            'rising': rising,
-            'falling': falling,
-        }
+        return edges
 
     def _find_settle_point(self, x: np.ndarray) -> int | None:
         """Find first sample within reset window."""

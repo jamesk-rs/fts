@@ -273,15 +273,17 @@ def cmd_stream(args):
         chan_a = data.real
         chan_b = data.imag
 
-        # Detect edges in this chunk
+        # Detect edges in this chunk (returns Nx2 array: [[time, type], ...])
         edges_a = detector_a.process(chan_a)
         edges_b = detector_b.process(chan_b)
 
-        # Accumulate falling edges
-        if len(edges_a['falling']) > 0:
-            all_falling_a.append(edges_a['falling'])
-        if len(edges_b['falling']) > 0:
-            all_falling_b.append(edges_b['falling'])
+        # Accumulate falling edges (type == 1)
+        falling_a = edges_a[edges_a[:, 1] == 1, 0] if len(edges_a) > 0 else np.array([])
+        falling_b = edges_b[edges_b[:, 1] == 1, 0] if len(edges_b) > 0 else np.array([])
+        if len(falling_a) > 0:
+            all_falling_a.append(falling_a)
+        if len(falling_b) > 0:
+            all_falling_b.append(falling_b)
 
         chunk_count += 1
 
@@ -477,15 +479,15 @@ def cmd_capture_edges(args):
         chan_a = data.real.astype(np.float64)
         chan_b = data.imag.astype(np.float64)
 
-        # Detect edges (returns dict with 'rising' and 'falling' arrays)
+        # Detect edges (returns Nx2 array: [[time, type], ...])
         edges_a = detector_a.process(chan_a)
         edges_b = detector_b.process(chan_b)
 
-        # Write edges to binary files
-        writer_a.write_edges(edges_a['rising'], EDGE_RISING)
-        writer_a.write_edges(edges_a['falling'], EDGE_FALLING)
-        writer_b.write_edges(edges_b['rising'], EDGE_RISING)
-        writer_b.write_edges(edges_b['falling'], EDGE_FALLING)
+        # Write edges directly (already in detection order)
+        for t, edge_type in edges_a:
+            writer_a.write_edge(float(t), int(edge_type))
+        for t, edge_type in edges_b:
+            writer_b.write_edge(float(t), int(edge_type))
 
         # Periodic report
         now = time.time()
@@ -615,13 +617,13 @@ def analyze_cfile_streaming(args):
             if len(chunk) == 0:
                 break
 
-            # Detect edges in each channel
+            # Detect edges in each channel (returns Nx2 array: [[time, type], ...])
             edges_a = detector_a.process(chunk.real.astype(np.float64))
             edges_b = detector_b.process(chunk.imag.astype(np.float64))
 
-            # Use falling edges (more reliable for AC-coupled signals)
-            ref_times = edges_a['falling']
-            target_times = edges_b['falling']
+            # Use falling edges (type == 1, more reliable for AC-coupled signals)
+            ref_times = edges_a[edges_a[:, 1] == 1, 0] if len(edges_a) > 0 else np.array([])
+            target_times = edges_b[edges_b[:, 1] == 1, 0] if len(edges_b) > 0 else np.array([])
 
             # Accumulate edge times for period analysis
             if len(ref_times) > 0:
