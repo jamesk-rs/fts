@@ -646,10 +646,36 @@ def generate_html_report(
     </div>
 '''
 
-    # Add FTM stats section if available
+    # Add edge processing stats section
+    edge_stats = metadata.get('edge_stats') if metadata else None
+    if edge_stats:
+        html += '''
+    <h2>Edge Processing</h2>
+    <div class="stats-grid">
+        <div class="stats-card">
+            <h3>Input</h3>
+'''
+        html += f'''            <div class="stat-row"><span class="stat-label">Reference edges</span><span class="stat-value">{edge_stats.get('total_ref', 0):,}</span></div>
+            <div class="stat-row"><span class="stat-label">Target edges</span><span class="stat-value">{edge_stats.get('total_target', 0):,}</span></div>
+'''
+        if edge_stats.get('skip_seconds', 0) > 0:
+            html += f'''            <div class="stat-row"><span class="stat-label">Alignment skip</span><span class="stat-value">{edge_stats['skip_seconds']:.3f}s</span></div>
+'''
+        html += f'''        </div>
+        <div class="stats-card">
+            <h3>Matching</h3>
+            <div class="stat-row"><span class="stat-label">Filtered ref</span><span class="stat-value">{edge_stats.get('filtered_ref', 0):,}</span></div>
+            <div class="stat-row"><span class="stat-label">Filtered target</span><span class="stat-value">{edge_stats.get('filtered_target', 0):,}</span></div>
+            <div class="stat-row"><span class="stat-label">Matched pairs</span><span class="stat-value">{edge_stats.get('matched', 0):,}</span></div>
+            <div class="stat-row"><span class="stat-label">Rejected</span><span class="stat-value">{edge_stats.get('rejected', 0):,}</span></div>
+        </div>
+    </div>
+'''
+
+    # Add device log stats section if available
     if ftm_data:
         html += '''
-    <h2>FTM WiFi Ranging Statistics</h2>
+    <h2>Device Log Statistics</h2>
     <div class="stats-grid">
 '''
         for ftm in ftm_data:

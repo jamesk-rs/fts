@@ -838,6 +838,7 @@ def analyze_edge_files(args):
     start_target = edges_target_first[0]['time'] if len(edges_target_first) > 0 else 0
     common_start = max(start_ref, start_target)
 
+    skip_seconds = 0.0
     if common_start > min(start_ref, start_target):
         skip_seconds = (common_start - min(start_ref, start_target)) / sample_rate
         print(f"  Auto-skipping {skip_seconds:.3f}s to align channels")
@@ -1126,6 +1127,15 @@ def analyze_edge_files(args):
         'duration_s': duration_s,
         'period_stats_a': period_stats_a_dict,
         'period_stats_b': period_stats_b_dict,
+        'edge_stats': {
+            'total_ref': n_ref,
+            'total_target': n_target,
+            'skip_seconds': skip_seconds,
+            'filtered_ref': total_ref_filtered,
+            'filtered_target': total_target_filtered,
+            'matched': matcher.match_count,
+            'rejected': matcher.reject_count,
+        },
     }
 
     # Generate HTML report
