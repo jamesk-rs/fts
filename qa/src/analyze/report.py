@@ -403,6 +403,94 @@ def plot_periods(
         plt.show()
 
 
+def plot_ftm_timeseries(
+    ftm_data: list,
+    value_type: str,
+    capture_start: Optional[datetime] = None,
+) -> Optional[str]:
+    """
+    Plot FTM values over time and return as base64 encoded image.
+
+    Args:
+        ftm_data: List of FTM data dicts (each with 'sessions', 'label')
+        value_type: 'rtt' for RTT or 'rssi' for RSSI
+        capture_start: Optional capture start time for relative timestamps
+
+    Returns:
+        Base64 encoded PNG image data, or None if no data
+    """
+    import matplotlib.pyplot as plt
+    import io
+
+    # Collect data points from all slaves
+    all_times = []
+    all_values = []
+    all_labels = []
+
+    for ftm in ftm_data:
+        sessions = ftm.get('sessions', [])
+        label = ftm.get('label', 'Unknown')
+        start = ftm.get('capture_start') or capture_start
+
+        for s in sessions:
+            if not s.success or s.timestamp is None:
+                continue
+
+            if value_type == 'rtt' and s.rtt_avg_ns is not None:
+                value = s.rtt_avg_ns
+            elif value_type == 'rssi' and s.rssi_avg is not None:
+                value = s.rssi_avg
+            else:
+                continue
+
+            # Calculate relative time from capture start
+            if start:
+                rel_time = (s.timestamp - start).total_seconds()
+            else:
+                rel_time = s.timestamp.timestamp()
+
+            all_times.append(rel_time)
+            all_values.append(value)
+            all_labels.append(label)
+
+    if not all_values:
+        return None
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    # Group by label for different colors
+    unique_labels = sorted(set(all_labels))
+    colors = plt.cm.tab10.colors
+
+    for i, label in enumerate(unique_labels):
+        mask = [l == label for l in all_labels]
+        times = [t for t, m in zip(all_times, mask) if m]
+        values = [v for v, m in zip(all_values, mask) if m]
+        color = colors[i % len(colors)]
+        ax.plot(times, values, '.', markersize=4, alpha=0.7, color=color, label=label)
+
+    ax.set_xlabel("Time (s)")
+    if value_type == 'rtt':
+        ax.set_ylabel("RTT (ns)")
+        ax.set_title("FTM Round-Trip Time")
+    else:
+        ax.set_ylabel("RSSI (dBm)")
+        ax.set_title("FTM Signal Strength")
+
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    # Convert to base64
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150)
+    plt.close()
+    buf.seek(0)
+    img_data = base64.b64encode(buf.read()).decode('utf-8')
+    return f'data:image/png;base64,{img_data}'
+
+
 def generate_report(
     delays_seconds: np.ndarray,
     output_dir: str | Path,
@@ -588,7 +676,35 @@ def generate_html_report(
 '''
 
     html += '''    </div>
+'''
 
+    # Add edge processing stats section (before plots)
+    edge_stats = metadata.get('edge_stats') if metadata else None
+    if edge_stats:
+        html += '''
+    <h2>Edge Processing</h2>
+    <div class="stats-grid">
+        <div class="stats-card">
+            <h3>Input</h3>
+'''
+        html += f'''            <div class="stat-row"><span class="stat-label">Reference edges</span><span class="stat-value">{edge_stats.get('total_ref', 0):,}</span></div>
+            <div class="stat-row"><span class="stat-label">Target edges</span><span class="stat-value">{edge_stats.get('total_target', 0):,}</span></div>
+'''
+        if edge_stats.get('skip_seconds', 0) > 0:
+            html += f'''            <div class="stat-row"><span class="stat-label">Alignment skip</span><span class="stat-value">{edge_stats['skip_seconds']:.3f}s</span></div>
+'''
+        html += f'''        </div>
+        <div class="stats-card">
+            <h3>Matching</h3>
+            <div class="stat-row"><span class="stat-label">Filtered ref</span><span class="stat-value">{edge_stats.get('filtered_ref', 0):,}</span></div>
+            <div class="stat-row"><span class="stat-label">Filtered target</span><span class="stat-value">{edge_stats.get('filtered_target', 0):,}</span></div>
+            <div class="stat-row"><span class="stat-label">Matched pairs</span><span class="stat-value">{edge_stats.get('matched', 0):,}</span></div>
+            <div class="stat-row"><span class="stat-label">Rejected</span><span class="stat-value">{edge_stats.get('rejected', 0):,}</span></div>
+        </div>
+    </div>
+'''
+
+    html += '''
     <h2>Delay Analysis</h2>
     <div class="plot-row">
 '''
@@ -646,32 +762,6 @@ def generate_html_report(
     </div>
 '''
 
-    # Add edge processing stats section
-    edge_stats = metadata.get('edge_stats') if metadata else None
-    if edge_stats:
-        html += '''
-    <h2>Edge Processing</h2>
-    <div class="stats-grid">
-        <div class="stats-card">
-            <h3>Input</h3>
-'''
-        html += f'''            <div class="stat-row"><span class="stat-label">Reference edges</span><span class="stat-value">{edge_stats.get('total_ref', 0):,}</span></div>
-            <div class="stat-row"><span class="stat-label">Target edges</span><span class="stat-value">{edge_stats.get('total_target', 0):,}</span></div>
-'''
-        if edge_stats.get('skip_seconds', 0) > 0:
-            html += f'''            <div class="stat-row"><span class="stat-label">Alignment skip</span><span class="stat-value">{edge_stats['skip_seconds']:.3f}s</span></div>
-'''
-        html += f'''        </div>
-        <div class="stats-card">
-            <h3>Matching</h3>
-            <div class="stat-row"><span class="stat-label">Filtered ref</span><span class="stat-value">{edge_stats.get('filtered_ref', 0):,}</span></div>
-            <div class="stat-row"><span class="stat-label">Filtered target</span><span class="stat-value">{edge_stats.get('filtered_target', 0):,}</span></div>
-            <div class="stat-row"><span class="stat-label">Matched pairs</span><span class="stat-value">{edge_stats.get('matched', 0):,}</span></div>
-            <div class="stat-row"><span class="stat-label">Rejected</span><span class="stat-value">{edge_stats.get('rejected', 0):,}</span></div>
-        </div>
-    </div>
-'''
-
     # Add device log stats section if available
     if ftm_data:
         html += '''
@@ -681,12 +771,14 @@ def generate_html_report(
         for ftm in ftm_data:
             stats = ftm.get('stats', {})
             label = ftm.get('label', 'Unknown')
-            success_rate = stats.get('success_rate', 0) * 100
+            session_success = stats.get('success_rate', 0) * 100
+            entry_success = stats.get('entry_success_rate', 0) * 100
 
             html += f'''        <div class="stats-card">
             <h3>{label}</h3>
             <div class="stat-row"><span class="stat-label">Sessions</span><span class="stat-value">{stats.get('count', 0)}</span></div>
-            <div class="stat-row"><span class="stat-label">Success Rate</span><span class="stat-value">{success_rate:.1f}%</span></div>
+            <div class="stat-row"><span class="stat-label">Session Success</span><span class="stat-value">{session_success:.1f}%</span></div>
+            <div class="stat-row"><span class="stat-label">Entry Success</span><span class="stat-value">{entry_success:.1f}%</span></div>
 '''
             if 'rtt_mean_ns' in stats:
                 html += f'''            <div class="stat-row"><span class="stat-label">RTT Mean</span><span class="stat-value">{stats['rtt_mean_ns']:.1f} ns</span></div>
@@ -700,6 +792,28 @@ def generate_html_report(
             html += '''        </div>
 '''
         html += '''    </div>
+'''
+
+        # Add FTM plots
+        rtt_plot = plot_ftm_timeseries(ftm_data, 'rtt')
+        rssi_plot = plot_ftm_timeseries(ftm_data, 'rssi')
+
+        if rtt_plot or rssi_plot:
+            html += '''
+    <h2>FTM Measurements</h2>
+    <div class="plot-row">
+'''
+            if rtt_plot:
+                html += f'''        <div class="plot-container">
+            <img src="{rtt_plot}" alt="FTM RTT">
+        </div>
+'''
+            if rssi_plot:
+                html += f'''        <div class="plot-container">
+            <img src="{rssi_plot}" alt="FTM RSSI">
+        </div>
+'''
+            html += '''    </div>
 '''
 
     html += '''</body>

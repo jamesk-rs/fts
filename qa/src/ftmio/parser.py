@@ -16,6 +16,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# Number of FTM frames per burst (ESP32 FTM configuration)
+FTM_BURST_SIZE = 64
+
 
 @dataclass
 class FTMSession:
@@ -210,11 +213,17 @@ def compute_ftm_stats(sessions: list[FTMSession]) -> dict:
 
     successful = [s for s in sessions if s.success]
 
-    if not successful:
+    if not sessions:
         return {
             'count': 0,
             'success_rate': 0.0,
+            'entry_success_rate': 0.0,
         }
+
+    # Entry success rate: total entries received / total possible entries
+    total_entries = sum(s.entries for s in sessions)
+    max_entries = FTM_BURST_SIZE * len(sessions)
+    entry_success_rate = total_entries / max_entries if max_entries > 0 else 0.0
 
     rtt_values = [s.rtt_avg_ns for s in successful if s.rtt_avg_ns is not None]
     rssi_values = [s.rssi_avg for s in successful if s.rssi_avg is not None]
@@ -223,6 +232,9 @@ def compute_ftm_stats(sessions: list[FTMSession]) -> dict:
         'count': len(sessions),
         'success_count': len(successful),
         'success_rate': len(successful) / len(sessions) if sessions else 0.0,
+        'entry_success_rate': entry_success_rate,
+        'total_entries': total_entries,
+        'max_entries': max_entries,
     }
 
     if rtt_values:
