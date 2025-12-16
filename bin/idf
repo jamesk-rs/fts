@@ -188,15 +188,15 @@ if [[ "$DO_MONITOR" == true ]]; then
         if $MON_MASTER; then
             echo "Monitoring MASTER..."
             . $ESP_IDF_EXPORT > /dev/null 2>&1
-            idf.py -B $BUILDDIR_MASTER -p $SERIAL_PORT_MASTER monitor
+            idf.py -B $BUILDDIR_MASTER -p $SERIAL_PORT_MASTER monitor --timestamps
         elif $MON_SLAVE1; then
             echo "Monitoring SLAVE 1..."
             . $ESP_IDF_EXPORT > /dev/null 2>&1
-            idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_1 monitor
+            idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_1 monitor --timestamps
         elif $MON_SLAVE2; then
             echo "Monitoring SLAVE 2..."
             . $ESP_IDF_EXPORT > /dev/null 2>&1
-            idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_2 monitor
+            idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_2 monitor --timestamps
         fi
     else
         # Multiple monitors - use tmux
@@ -213,7 +213,7 @@ if [[ "$DO_MONITOR" == true ]]; then
                 tmux split-window -t fts_monitor -v
             fi
             tmux send-keys -t fts_monitor \
-                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && idf.py -B $BUILDDIR_MASTER -p $SERIAL_PORT_MASTER monitor" C-m
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && idf.py -B $BUILDDIR_MASTER -p $SERIAL_PORT_MASTER monitor --timestamps" C-m
         fi
 
         if $MON_SLAVE1; then
@@ -223,7 +223,7 @@ if [[ "$DO_MONITOR" == true ]]; then
                 tmux split-window -t fts_monitor -v
             fi
             tmux send-keys -t fts_monitor \
-                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_1 monitor" C-m
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_1 monitor --timestamps" C-m
         fi
 
         if $MON_SLAVE2; then
@@ -233,7 +233,7 @@ if [[ "$DO_MONITOR" == true ]]; then
                 tmux split-window -t fts_monitor -v
             fi
             tmux send-keys -t fts_monitor \
-                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_2 monitor" C-m
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_2 monitor --timestamps" C-m
         fi
 
         # Balance panes and attach
