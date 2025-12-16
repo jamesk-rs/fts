@@ -111,6 +111,7 @@ class EdgeFileWriter:
         self.file_path = self.output_dir / f'edges_ch{channel}.bin'
         self._file = open(self.file_path, 'ab')  # Append binary mode
         self._count = 0
+        self._last_time = -1.0  # Track last written time for monotonicity check
 
     def write_edges(self, times: np.ndarray, edge_type: int) -> int:
         """
@@ -122,17 +123,38 @@ class EdgeFileWriter:
 
         Returns:
             Number of edges written
+
+        Raises:
+            ValueError: If timestamps are not monotonically increasing
         """
         for t in times:
+            if t < self._last_time:
+                raise ValueError(
+                    f"Edge timestamp went backwards: {t} < {self._last_time} "
+                    f"(ch{self.channel}, edge #{self._count}). "
+                    f"This indicates data corruption - check if edge files were cleared before capture."
+                )
             record = struct.pack(RECORD_FORMAT, float(t), edge_type)
             self._file.write(record)
+            self._last_time = t
             self._count += 1
         return len(times)
 
     def write_edge(self, time: float, edge_type: int):
-        """Write a single edge."""
+        """Write a single edge.
+
+        Raises:
+            ValueError: If timestamp is less than the last written timestamp
+        """
+        if time < self._last_time:
+            raise ValueError(
+                f"Edge timestamp went backwards: {time} < {self._last_time} "
+                f"(ch{self.channel}, edge #{self._count}). "
+                f"This indicates data corruption - check if edge files were cleared before capture."
+            )
         record = struct.pack(RECORD_FORMAT, time, edge_type)
         self._file.write(record)
+        self._last_time = time
         self._count += 1
 
     def flush(self):

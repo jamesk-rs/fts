@@ -403,6 +403,14 @@ def cmd_capture_edges(args):
     output_dir = Path(args.directory)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Check for existing edge files (refuse to overwrite to prevent data corruption)
+    existing_files = list(output_dir.glob('edges_ch*.bin'))
+    if existing_files:
+        print(f"Error: Edge files already exist in {output_dir}/")
+        print(f"  Found: {', '.join(f.name for f in existing_files)}")
+        print(f"  Remove existing files or use a different directory to avoid data corruption.")
+        return 1
+
     # Compute min_distance from pulse frequency
     samples_per_period = args.sample_rate / args.pulse_freq
     min_distance = int(samples_per_period * 0.4)
