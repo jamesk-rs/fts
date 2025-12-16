@@ -73,22 +73,25 @@ def plot_histogram(
     output_path: Optional[str | Path] = None,
     title: str = "Delay Distribution",
     bins: int = 100,
+    show_normal: bool = True,
 ) -> None:
     """
-    Plot histogram of delay measurements.
+    Plot histogram of delay measurements with optional normal distribution overlay.
 
     Args:
         delays_seconds: Array of time delays in seconds
         output_path: Optional path to save figure (displays if None)
         title: Plot title
         bins: Number of histogram bins
+        show_normal: If True, overlay fitted normal distribution curve
     """
     import matplotlib.pyplot as plt
+    from scipy import stats as scipy_stats
 
     delays_ns = delays_seconds * 1e9
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.hist(delays_ns, bins=bins, color='steelblue', alpha=0.8, edgecolor='white')
+    n, bin_edges, patches = ax.hist(delays_ns, bins=bins, color='steelblue', alpha=0.8, edgecolor='white')
     ax.set_xlabel("Delay (ns)")
     ax.set_ylabel("Count")
     ax.set_title(title)
@@ -100,6 +103,16 @@ def plot_histogram(
     ax.axvline(mean, color='red', linestyle='--', label=f'Mean: {mean:.2f} ns')
     ax.axvline(mean - std, color='orange', linestyle=':', alpha=0.7)
     ax.axvline(mean + std, color='orange', linestyle=':', alpha=0.7, label=f'±1σ: {std:.2f} ns')
+
+    # Add normal distribution overlay
+    if show_normal and std > 0:
+        x = np.linspace(mean - 4*std, mean + 4*std, 200)
+        y = scipy_stats.norm.pdf(x, mean, std)
+        # Scale to histogram
+        bin_width = bin_edges[1] - bin_edges[0]
+        y_scaled = y * len(delays_ns) * bin_width
+        ax.plot(x, y_scaled, 'r-', linewidth=2, alpha=0.8, label='Normal fit')
+
     ax.legend()
 
     plt.tight_layout()
@@ -521,6 +534,16 @@ def plot_ftm_timeseries(
         color = colors[i % len(colors)]
         ax.plot(times, values, '.', markersize=4, alpha=0.7, color=color, label=label)
 
+    # Add 1-sigma shading (global mean/std across all data)
+    if len(all_values) > 1:
+        mean_val = np.mean(all_values)
+        std_val = np.std(all_values)
+        time_min, time_max = min(all_times), max(all_times)
+        ax.axhline(mean_val, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+        ax.fill_between([time_min, time_max],
+                        mean_val - std_val, mean_val + std_val,
+                        alpha=0.15, color='gray', label=f'±1σ ({std_val:.1f})')
+
     ax.set_xlabel("Time (s)")
     if value_type == 'rtt':
         ax.set_ylabel("RTT (ns)")
@@ -540,6 +563,147 @@ def plot_ftm_timeseries(
     buf.seek(0)
     img_data = base64.b64encode(buf.read()).decode('utf-8')
     return f'data:image/png;base64,{img_data}'
+
+
+def plot_ftm_histogram(
+    ftm_data: list,
+    value_type: str,
+    capture_start: Optional[datetime] = None,
+) -> Optional[str]:
+    """
+    Plot FTM value histogram and return as base64 encoded image.
+
+    Args:
+        ftm_data: List of FTM data dicts (each with 'sessions', 'label')
+        value_type: 'rtt' for RTT or 'rssi' for RSSI
+        capture_start: Optional capture start time (unused, for API consistency)
+
+    Returns:
+        Base64 encoded PNG image data, or None if no data
+    """
+    import matplotlib.pyplot as plt
+    import io
+
+    # Collect values from all slaves
+    all_values = []
+    labels = []
+
+    for ftm in ftm_data:
+        sessions = ftm.get('sessions', [])
+        label = ftm.get('label', 'Unknown')
+
+        for s in sessions:
+            if not s.success:
+                continue
+
+            if value_type == 'rtt' and s.rtt_avg_ns is not None:
+                all_values.append(s.rtt_avg_ns)
+                labels.append(label)
+            elif value_type == 'rssi' and s.rssi_avg is not None:
+                all_values.append(s.rssi_avg)
+                labels.append(label)
+
+    if not all_values:
+        return None
+
+    # Create histogram
+    fig, ax = plt.subplots(figsize=(8, 4))
+
+    # Group by label for stacked histogram
+    unique_labels = sorted(set(labels))
+    colors = plt.cm.tab10.colors
+
+    data_by_label = []
+    for label in unique_labels:
+        data_by_label.append([v for v, l in zip(all_values, labels) if l == label])
+
+    ax.hist(data_by_label, bins=50, stacked=True, alpha=0.8,
+            color=[colors[i % len(colors)] for i in range(len(unique_labels))],
+            label=unique_labels, edgecolor='white')
+
+    # Add mean/std lines
+    mean_val = np.mean(all_values)
+    std_val = np.std(all_values)
+    ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_val:.1f}')
+    ax.axvline(mean_val - std_val, color='orange', linestyle=':', alpha=0.7)
+    ax.axvline(mean_val + std_val, color='orange', linestyle=':', alpha=0.7, label=f'±1σ: {std_val:.1f}')
+
+    if value_type == 'rtt':
+        ax.set_xlabel("RTT (ns)")
+        ax.set_title("RTT Distribution")
+    else:
+        ax.set_xlabel("RSSI (dBm)")
+        ax.set_title("RSSI Distribution")
+
+    ax.set_ylabel("Count")
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    # Convert to base64
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150)
+    plt.close()
+    buf.seek(0)
+    img_data = base64.b64encode(buf.read()).decode('utf-8')
+    return f'data:image/png;base64,{img_data}'
+
+
+def render_ftm_table(ftm_data: list) -> str:
+    """
+    Generate HTML table for FTM statistics.
+
+    Args:
+        ftm_data: List of FTM data dicts (each with 'stats', 'label')
+
+    Returns:
+        HTML string for the table
+    """
+    if not ftm_data:
+        return ""
+
+    html = '''<table class="ftm-table">
+    <tr>
+        <th>Device</th>
+        <th>Sessions</th>
+        <th>Success</th>
+        <th>RTT Mean</th>
+        <th>RTT Std</th>
+        <th>RTT Range</th>
+        <th>RSSI Mean</th>
+        <th>RSSI Range</th>
+    </tr>'''
+
+    for ftm in ftm_data:
+        stats = ftm.get('stats', {})
+        label = ftm.get('label', 'Unknown')
+        session_count = stats.get('count', 0)
+        success_rate = stats.get('success_rate', 0) * 100
+
+        rtt_mean = stats.get('rtt_mean_ns', 0)
+        rtt_std = stats.get('rtt_std_ns', 0)
+        rtt_min = stats.get('rtt_min_ns', 0)
+        rtt_max = stats.get('rtt_max_ns', 0)
+
+        rssi_mean = stats.get('rssi_mean', 0)
+        rssi_min = stats.get('rssi_min', 0)
+        rssi_max = stats.get('rssi_max', 0)
+
+        html += f'''
+    <tr>
+        <td>{label}</td>
+        <td>{session_count}</td>
+        <td>{success_rate:.1f}%</td>
+        <td>{rtt_mean:.1f} ns</td>
+        <td>{rtt_std:.1f} ns</td>
+        <td>[{rtt_min:.0f}, {rtt_max:.0f}]</td>
+        <td>{rssi_mean:.1f} dBm</td>
+        <td>[{rssi_min}, {rssi_max}]</td>
+    </tr>'''
+
+    html += '''
+</table>'''
+    return html
 
 
 def generate_report(
@@ -664,18 +828,167 @@ def generate_html_report(
         .plot-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px; }}
         .metadata {{ font-size: 0.9em; color: #666; }}
         .highlight {{ background: #e8f4f8; padding: 2px 6px; border-radius: 3px; }}
+        .input-highlight {{
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 8px;
+            padding: 15px 20px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 1.1em;
+            margin: 15px 0;
+            word-break: break-all;
+        }}
+        .ftm-table {{
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }}
+        .ftm-table th, .ftm-table td {{
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }}
+        .ftm-table th {{
+            background: #2980b9;
+            color: white;
+            font-weight: 600;
+        }}
+        .ftm-table tr:hover {{
+            background: #f5f5f5;
+        }}
+        .ftm-table td {{
+            font-family: 'SF Mono', Monaco, monospace;
+        }}
+        .edge-breakdown {{
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }}
+        .edge-breakdown h3 {{
+            color: #2980b9;
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }}
+        .edge-breakdown h3:first-child {{
+            margin-top: 0;
+        }}
+        .channel-group {{
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }}
     </style>
 </head>
 <body>
     <div class="header">
         <h1>FTS-QA Analysis Report</h1>
+        <div class="input-highlight">{input_file}</div>
         <p class="metadata">
-            <strong>Input:</strong> {input_file}<br>
-            <strong>Detection:</strong> {detection_method}<br>
+            <strong>Duration:</strong> {metadata.get('duration_s', 0):.1f}s |
+            <strong>Detection:</strong> {detection_method} |
             <strong>Generated:</strong> {timestamp}
         </p>
     </div>
+'''
 
+    # FTM Statistics section (moved up, includes table + plots)
+    if ftm_data:
+        html += '''
+    <h2>FTM Statistics</h2>
+'''
+        html += render_ftm_table(ftm_data)
+
+        # FTM plots (timeseries with 1-sigma + histograms)
+        rtt_plot = plot_ftm_timeseries(ftm_data, 'rtt')
+        rssi_plot = plot_ftm_timeseries(ftm_data, 'rssi')
+        rtt_hist = plot_ftm_histogram(ftm_data, 'rtt')
+        rssi_hist = plot_ftm_histogram(ftm_data, 'rssi')
+
+        if rtt_plot or rtt_hist:
+            html += '''
+    <h3>RTT Analysis</h3>
+    <div class="plot-row">
+'''
+            if rtt_plot:
+                html += f'''        <div class="plot-container">
+            <img src="{rtt_plot}" alt="FTM RTT Timeseries">
+        </div>
+'''
+            if rtt_hist:
+                html += f'''        <div class="plot-container">
+            <img src="{rtt_hist}" alt="FTM RTT Histogram">
+        </div>
+'''
+            html += '''    </div>
+'''
+
+        if rssi_plot or rssi_hist:
+            html += '''
+    <h3>RSSI Analysis</h3>
+    <div class="plot-row">
+'''
+            if rssi_plot:
+                html += f'''        <div class="plot-container">
+            <img src="{rssi_plot}" alt="FTM RSSI Timeseries">
+        </div>
+'''
+            if rssi_hist:
+                html += f'''        <div class="plot-container">
+            <img src="{rssi_hist}" alt="FTM RSSI Histogram">
+        </div>
+'''
+            html += '''    </div>
+'''
+
+    # Edge Processing section (moved up)
+    edge_stats = metadata.get('edge_stats') if metadata else None
+    if edge_stats:
+        skip_seconds = edge_stats.get('skip_seconds', 0)
+        total_ref = edge_stats.get('total_ref', 0)
+        total_target = edge_stats.get('total_target', 0)
+        filtered_ref = edge_stats.get('filtered_ref', 0)
+        filtered_target = edge_stats.get('filtered_target', 0)
+        matched = edge_stats.get('matched', 0)
+        rejected = edge_stats.get('rejected', 0)
+
+        # Calculate skipped edges
+        ref_skipped = total_ref - filtered_ref if total_ref > filtered_ref else 0
+        target_skipped = total_target - filtered_target if total_target > filtered_target else 0
+
+        html += f'''
+    <h2>Edge Processing</h2>
+    <div class="edge-breakdown">
+        <h3>Reference Channel</h3>
+        <div class="stat-row"><span class="stat-label">Total edges detected</span><span class="stat-value">{total_ref:,}</span></div>
+        <div class="stat-row"><span class="stat-label">After edge-type filter</span><span class="stat-value">{filtered_ref:,}</span></div>
+'''
+        if skip_seconds > 0:
+            html += f'''        <div class="stat-row"><span class="stat-label">Skipped (alignment)</span><span class="stat-value">{skip_seconds:.3f}s</span></div>
+'''
+        html += f'''
+        <h3>Target Channel</h3>
+        <div class="stat-row"><span class="stat-label">Total edges detected</span><span class="stat-value">{total_target:,}</span></div>
+        <div class="stat-row"><span class="stat-label">After edge-type filter</span><span class="stat-value">{filtered_target:,}</span></div>
+
+        <h3>Matching Results</h3>
+        <div class="stat-row"><span class="stat-label">Successfully paired</span><span class="stat-value">{matched:,}</span></div>
+        <div class="stat-row"><span class="stat-label">Rejected (out of window)</span><span class="stat-value">{rejected:,}</span></div>
+        <p style="font-size: 0.85em; color: #666; margin-top: 10px;">
+            Note: Filtered edges are those matching the selected edge type (rising/falling).
+            Rejected edges are pairs where the delay exceeded the maximum allowed window.
+        </p>
+    </div>
+'''
+
+    html += f'''
     <div class="stats-grid">
         <div class="stats-card">
             <h3>Jitter Statistics</h3>
@@ -687,6 +1000,7 @@ def generate_html_report(
             <div class="stat-row"><span class="stat-label">P50</span><span class="stat-value">±{jitter_stats.p50_ns:.3f} ns</span></div>
             <div class="stat-row"><span class="stat-label">P95</span><span class="stat-value">±{jitter_stats.p95_ns:.3f} ns</span></div>
             <div class="stat-row"><span class="stat-label">P99</span><span class="stat-value">±{jitter_stats.p99_ns:.3f} ns</span></div>
+            <div class="stat-row"><span class="stat-label">P99.9</span><span class="stat-value">±{jitter_stats.p999_ns:.3f} ns</span></div>
 '''
 
     if jitter_stats.phase_mean_deg is not None:
@@ -697,31 +1011,7 @@ def generate_html_report(
     html += '''        </div>
 '''
 
-    # Period stats cards
-    if period_stats_a:
-        html += f'''        <div class="stats-card">
-            <h3>Channel A Period</h3>
-            <div class="stat-row"><span class="stat-label">Mean Period</span><span class="stat-value">{period_stats_a['mean_us']:.3f} µs</span></div>
-            <div class="stat-row"><span class="stat-label">Std Dev</span><span class="stat-value">{period_stats_a['std_us']:.3f} µs</span></div>
-            <div class="stat-row"><span class="stat-label">Min</span><span class="stat-value">{period_stats_a.get('min_us', 0):.3f} µs</span></div>
-            <div class="stat-row"><span class="stat-label">Max</span><span class="stat-value">{period_stats_a.get('max_us', 0):.3f} µs</span></div>
-            <div class="stat-row"><span class="stat-label">Frequency</span><span class="stat-value">{period_stats_a['freq_hz']:.6f} Hz</span></div>
-            <div class="stat-row"><span class="stat-label">Error from Nominal</span><span class="stat-value">{period_stats_a['freq_ppm_error']:+.1f} ppm</span></div>
-        </div>
-'''
-
-    if period_stats_b:
-        html += f'''        <div class="stats-card">
-            <h3>Channel B Period</h3>
-            <div class="stat-row"><span class="stat-label">Mean Period</span><span class="stat-value">{period_stats_b['mean_us']:.3f} µs</span></div>
-            <div class="stat-row"><span class="stat-label">Std Dev</span><span class="stat-value">{period_stats_b['std_us']:.3f} µs</span></div>
-            <div class="stat-row"><span class="stat-label">Min</span><span class="stat-value">{period_stats_b.get('min_us', 0):.3f} µs</span></div>
-            <div class="stat-row"><span class="stat-label">Max</span><span class="stat-value">{period_stats_b.get('max_us', 0):.3f} µs</span></div>
-            <div class="stat-row"><span class="stat-label">Frequency</span><span class="stat-value">{period_stats_b['freq_hz']:.6f} Hz</span></div>
-            <div class="stat-row"><span class="stat-label">Error from Nominal</span><span class="stat-value">{period_stats_b['freq_ppm_error']:+.1f} ppm</span></div>
-        </div>
-'''
-
+    # Frequency Skew card (period stats moved to Period Analysis section)
     if frequency_skew_ppm is not None:
         html += f'''        <div class="stats-card">
             <h3>Frequency Skew</h3>
@@ -731,35 +1021,7 @@ def generate_html_report(
 '''
 
     html += '''    </div>
-'''
 
-    # Add edge processing stats section (before plots)
-    edge_stats = metadata.get('edge_stats') if metadata else None
-    if edge_stats:
-        html += '''
-    <h2>Edge Processing</h2>
-    <div class="stats-grid">
-        <div class="stats-card">
-            <h3>Input</h3>
-'''
-        html += f'''            <div class="stat-row"><span class="stat-label">Reference edges</span><span class="stat-value">{edge_stats.get('total_ref', 0):,}</span></div>
-            <div class="stat-row"><span class="stat-label">Target edges</span><span class="stat-value">{edge_stats.get('total_target', 0):,}</span></div>
-'''
-        if edge_stats.get('skip_seconds', 0) > 0:
-            html += f'''            <div class="stat-row"><span class="stat-label">Alignment skip</span><span class="stat-value">{edge_stats['skip_seconds']:.3f}s</span></div>
-'''
-        html += f'''        </div>
-        <div class="stats-card">
-            <h3>Matching</h3>
-            <div class="stat-row"><span class="stat-label">Filtered ref</span><span class="stat-value">{edge_stats.get('filtered_ref', 0):,}</span></div>
-            <div class="stat-row"><span class="stat-label">Filtered target</span><span class="stat-value">{edge_stats.get('filtered_target', 0):,}</span></div>
-            <div class="stat-row"><span class="stat-label">Matched pairs</span><span class="stat-value">{edge_stats.get('matched', 0):,}</span></div>
-            <div class="stat-row"><span class="stat-label">Rejected</span><span class="stat-value">{edge_stats.get('rejected', 0):,}</span></div>
-        </div>
-    </div>
-'''
-
-    html += '''
     <h2>Delay Analysis</h2>
     <div class="plot-row">
 '''
@@ -784,45 +1046,78 @@ def generate_html_report(
     html += '''    </div>
 
     <h2>Period Analysis</h2>
-    <h3>Combined View</h3>
-    <div class="plot-row">
 '''
 
+    # Combined view
     periods_data = embed_image('periods.png')
-    if periods_data:
-        html += f'''        <div class="plot-container">
-            <h3>Period vs Time</h3>
+    period_hist_data = embed_image('period_histogram.png')
+    if periods_data or period_hist_data:
+        html += '''    <h3>Combined View</h3>
+    <div class="plot-row">
+'''
+        if periods_data:
+            html += f'''        <div class="plot-container">
             <img src="{periods_data}" alt="Period Timeseries">
         </div>
 '''
-
-    period_hist_data = embed_image('period_histogram.png')
-    if period_hist_data:
-        html += f'''        <div class="plot-container">
-            <h3>Period Distribution</h3>
+        if period_hist_data:
+            html += f'''        <div class="plot-container">
             <img src="{period_hist_data}" alt="Period Histogram">
         </div>
 '''
-
-    html += '''    </div>
+        html += '''    </div>
 '''
 
-    # Split view (separate channels)
+    # Per-channel analysis with stats
     periods_split_data = embed_image('periods_split.png')
     period_hist_split_data = embed_image('period_histogram_split.png')
+
+    # Channel A subgroup
+    if period_stats_a:
+        html += f'''
+    <h3>Channel A (Reference)</h3>
+    <div class="channel-group">
+        <div class="stats-grid" style="margin-bottom: 15px;">
+            <div class="stats-card">
+                <div class="stat-row"><span class="stat-label">Mean Period</span><span class="stat-value">{period_stats_a['mean_us']:.3f} µs</span></div>
+                <div class="stat-row"><span class="stat-label">Std Dev</span><span class="stat-value">{period_stats_a['std_us']:.3f} µs</span></div>
+                <div class="stat-row"><span class="stat-label">Range</span><span class="stat-value">[{period_stats_a.get('min_us', 0):.3f}, {period_stats_a.get('max_us', 0):.3f}] µs</span></div>
+                <div class="stat-row"><span class="stat-label">Frequency</span><span class="stat-value">{period_stats_a['freq_hz']:.6f} Hz</span></div>
+                <div class="stat-row"><span class="stat-label">Error from Nominal</span><span class="stat-value">{period_stats_a['freq_ppm_error']:+.1f} ppm</span></div>
+            </div>
+        </div>
+    </div>
+'''
+
+    # Channel B subgroup
+    if period_stats_b:
+        html += f'''
+    <h3>Channel B (Target)</h3>
+    <div class="channel-group">
+        <div class="stats-grid" style="margin-bottom: 15px;">
+            <div class="stats-card">
+                <div class="stat-row"><span class="stat-label">Mean Period</span><span class="stat-value">{period_stats_b['mean_us']:.3f} µs</span></div>
+                <div class="stat-row"><span class="stat-label">Std Dev</span><span class="stat-value">{period_stats_b['std_us']:.3f} µs</span></div>
+                <div class="stat-row"><span class="stat-label">Range</span><span class="stat-value">[{period_stats_b.get('min_us', 0):.3f}, {period_stats_b.get('max_us', 0):.3f}] µs</span></div>
+                <div class="stat-row"><span class="stat-label">Frequency</span><span class="stat-value">{period_stats_b['freq_hz']:.6f} Hz</span></div>
+                <div class="stat-row"><span class="stat-label">Error from Nominal</span><span class="stat-value">{period_stats_b['freq_ppm_error']:+.1f} ppm</span></div>
+            </div>
+        </div>
+    </div>
+'''
+
+    # Split view plots
     if periods_split_data or period_hist_split_data:
-        html += '''    <h3>Split View (Separate Channels)</h3>
+        html += '''    <h3>Per-Channel Distributions</h3>
     <div class="plot-row">
 '''
         if periods_split_data:
             html += f'''        <div class="plot-container">
-            <h3>Period vs Time (Split)</h3>
             <img src="{periods_split_data}" alt="Period Timeseries Split">
         </div>
 '''
         if period_hist_split_data:
             html += f'''        <div class="plot-container">
-            <h3>Period Distribution (Split)</h3>
             <img src="{period_hist_split_data}" alt="Period Histogram Split">
         </div>
 '''
@@ -838,60 +1133,6 @@ def generate_html_report(
         <h3>Sample Pulses</h3>
         <img src="{pulses_data}" alt="Sample Pulses">
     </div>
-'''
-
-    # Add device log stats section if available
-    if ftm_data:
-        html += '''
-    <h2>Device Log Statistics</h2>
-    <div class="stats-grid">
-'''
-        for ftm in ftm_data:
-            stats = ftm.get('stats', {})
-            label = ftm.get('label', 'Unknown')
-            session_success = stats.get('success_rate', 0) * 100
-            entry_success = stats.get('entry_success_rate', 0) * 100
-
-            html += f'''        <div class="stats-card">
-            <h3>{label}</h3>
-            <div class="stat-row"><span class="stat-label">Sessions</span><span class="stat-value">{stats.get('count', 0)}</span></div>
-            <div class="stat-row"><span class="stat-label">Session Success</span><span class="stat-value">{session_success:.1f}%</span></div>
-            <div class="stat-row"><span class="stat-label">Entry Success</span><span class="stat-value">{entry_success:.1f}%</span></div>
-'''
-            if 'rtt_mean_ns' in stats:
-                html += f'''            <div class="stat-row"><span class="stat-label">RTT Mean</span><span class="stat-value">{stats['rtt_mean_ns']:.1f} ns</span></div>
-            <div class="stat-row"><span class="stat-label">RTT Std</span><span class="stat-value">{stats.get('rtt_std_ns', 0):.1f} ns</span></div>
-            <div class="stat-row"><span class="stat-label">RTT Range</span><span class="stat-value">[{stats.get('rtt_min_ns', 0):.1f}, {stats.get('rtt_max_ns', 0):.1f}] ns</span></div>
-'''
-            if 'rssi_mean' in stats:
-                html += f'''            <div class="stat-row"><span class="stat-label">RSSI Mean</span><span class="stat-value">{stats['rssi_mean']:.1f} dBm</span></div>
-            <div class="stat-row"><span class="stat-label">RSSI Range</span><span class="stat-value">[{stats.get('rssi_min', 0)}, {stats.get('rssi_max', 0)}] dBm</span></div>
-'''
-            html += '''        </div>
-'''
-        html += '''    </div>
-'''
-
-        # Add FTM plots
-        rtt_plot = plot_ftm_timeseries(ftm_data, 'rtt')
-        rssi_plot = plot_ftm_timeseries(ftm_data, 'rssi')
-
-        if rtt_plot or rssi_plot:
-            html += '''
-    <h2>FTM Measurements</h2>
-    <div class="plot-row">
-'''
-            if rtt_plot:
-                html += f'''        <div class="plot-container">
-            <img src="{rtt_plot}" alt="FTM RTT">
-        </div>
-'''
-            if rssi_plot:
-                html += f'''        <div class="plot-container">
-            <img src="{rssi_plot}" alt="FTM RSSI">
-        </div>
-'''
-            html += '''    </div>
 '''
 
     html += '''</body>

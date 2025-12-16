@@ -18,6 +18,7 @@ class JitterStats:
     p50_ns: float
     p95_ns: float
     p99_ns: float
+    p999_ns: float  # 99.9th percentile
     phase_mean_deg: Optional[float] = None
     phase_std_deg: Optional[float] = None
 
@@ -31,6 +32,7 @@ class JitterStats:
             f"  P50:    ±{self.p50_ns:.3f} ns",
             f"  P95:    ±{self.p95_ns:.3f} ns",
             f"  P99:    ±{self.p99_ns:.3f} ns",
+            f"  P99.9:  ±{self.p999_ns:.3f} ns",
         ]
         return "\n".join(lines)
 
@@ -45,6 +47,7 @@ class JitterStats:
             'p50_ns': self.p50_ns,
             'p95_ns': self.p95_ns,
             'p99_ns': self.p99_ns,
+            'p999_ns': self.p999_ns,
             'phase_mean_deg': self.phase_mean_deg,
             'phase_std_deg': self.phase_std_deg,
         }
@@ -86,6 +89,7 @@ def compute_stats(
         p50_ns=float(np.percentile(deviation_ns, 50)),
         p95_ns=float(np.percentile(deviation_ns, 95)),
         p99_ns=float(np.percentile(deviation_ns, 99)),
+        p999_ns=float(np.percentile(deviation_ns, 99.9)),
         phase_mean_deg=phase_mean,
         phase_std_deg=phase_std,
     )

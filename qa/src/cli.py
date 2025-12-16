@@ -672,6 +672,7 @@ def analyze_cfile_streaming(args):
     print(f"  P50:    ±{stats.percentile(50):.3f} ns")
     print(f"  P95:    ±{stats.percentile(95):.3f} ns")
     print(f"  P99:    ±{stats.percentile(99):.3f} ns")
+    print(f"  P99.9:  ±{stats.percentile(99.9):.3f} ns")
 
     # Period analysis
     print("\nPeriod analysis...")
@@ -723,6 +724,7 @@ def analyze_cfile_streaming(args):
         p50_ns=stats.percentile(50),
         p95_ns=stats.percentile(95),
         p99_ns=stats.percentile(99),
+        p999_ns=stats.percentile(99.9),
     )
 
     # Period stats for HTML report
@@ -1083,6 +1085,7 @@ def analyze_edge_files(args):
     print(f"  P50:    ±{stats.percentile(50):.3f} ns")
     print(f"  P95:    ±{stats.percentile(95):.3f} ns")
     print(f"  P99:    ±{stats.percentile(99):.3f} ns")
+    print(f"  P99.9:  ±{stats.percentile(99.9):.3f} ns")
 
     print(f"\nSaved {stats.count} delays to {delay_file}")
 
@@ -1132,6 +1135,7 @@ def analyze_edge_files(args):
         p50_ns=stats.percentile(50),
         p95_ns=stats.percentile(95),
         p99_ns=stats.percentile(99),
+        p999_ns=stats.percentile(99.9),
     )
 
     # Period stats dicts for HTML report
@@ -1351,19 +1355,21 @@ def analyze_edge_files_v2(args):
     print(f"  P50:    ±{stats.percentile(50):.3f} ns")
     print(f"  P95:    ±{stats.percentile(95):.3f} ns")
     print(f"  P99:    ±{stats.percentile(99):.3f} ns")
+    print(f"  P99.9:  ±{stats.percentile(99.9):.3f} ns")
 
     print(f"\nSaved {stats.count} delays to {delay_file}")
 
     # Create JitterStats for report
     jitter_stats = JitterStats(
-        mean=stats.mean,
-        std=stats.std,
-        min_val=stats.min,
-        max_val=stats.max,
-        p50=stats.percentile(50),
-        p95=stats.percentile(95),
-        p99=stats.percentile(99),
         count=stats.count,
+        mean_ns=stats.mean,
+        std_ns=stats.std,
+        min_ns=stats.min,
+        max_ns=stats.max,
+        p50_ns=stats.percentile(50),
+        p95_ns=stats.percentile(95),
+        p99_ns=stats.percentile(99),
+        p999_ns=stats.percentile(99.9),
     )
 
     # Metadata for report
