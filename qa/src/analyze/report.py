@@ -461,6 +461,7 @@ def generate_html_report(
     frequency_skew_ppm: Optional[float] = None,
     frequency_skew_ns_per_sec: Optional[float] = None,
     metadata: Optional[dict] = None,
+    ftm_data: Optional[list] = None,
 ) -> Path:
     """
     Generate an HTML report with all plots and statistics on one page.
@@ -473,6 +474,7 @@ def generate_html_report(
         frequency_skew_ppm: Optional frequency skew in PPM
         frequency_skew_ns_per_sec: Optional drift rate in ns/s
         metadata: Optional metadata dict
+        ftm_data: Optional list of FTM log data dicts (one per slave)
 
     Returns:
         Path to generated HTML file
@@ -642,6 +644,36 @@ def generate_html_report(
         <h3>Sample Pulses</h3>
         <img src="{pulses_data}" alt="Sample Pulses">
     </div>
+'''
+
+    # Add FTM stats section if available
+    if ftm_data:
+        html += '''
+    <h2>FTM WiFi Ranging Statistics</h2>
+    <div class="stats-grid">
+'''
+        for ftm in ftm_data:
+            stats = ftm.get('stats', {})
+            label = ftm.get('label', 'Unknown')
+            success_rate = stats.get('success_rate', 0) * 100
+
+            html += f'''        <div class="stats-card">
+            <h3>{label}</h3>
+            <div class="stat-row"><span class="stat-label">Sessions</span><span class="stat-value">{stats.get('count', 0)}</span></div>
+            <div class="stat-row"><span class="stat-label">Success Rate</span><span class="stat-value">{success_rate:.1f}%</span></div>
+'''
+            if 'rtt_mean_ns' in stats:
+                html += f'''            <div class="stat-row"><span class="stat-label">RTT Mean</span><span class="stat-value">{stats['rtt_mean_ns']:.1f} ns</span></div>
+            <div class="stat-row"><span class="stat-label">RTT Std</span><span class="stat-value">{stats.get('rtt_std_ns', 0):.1f} ns</span></div>
+            <div class="stat-row"><span class="stat-label">RTT Range</span><span class="stat-value">[{stats.get('rtt_min_ns', 0):.1f}, {stats.get('rtt_max_ns', 0):.1f}] ns</span></div>
+'''
+            if 'rssi_mean' in stats:
+                html += f'''            <div class="stat-row"><span class="stat-label">RSSI Mean</span><span class="stat-value">{stats['rssi_mean']:.1f} dBm</span></div>
+            <div class="stat-row"><span class="stat-label">RSSI Range</span><span class="stat-value">[{stats.get('rssi_min', 0)}, {stats.get('rssi_max', 0)}] dBm</span></div>
+'''
+            html += '''        </div>
+'''
+        html += '''    </div>
 '''
 
     html += '''</body>

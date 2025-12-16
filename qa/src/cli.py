@@ -779,6 +779,37 @@ def analyze_edge_files(args):
     print(f"  Sample rate: {sample_rate/1e6:.1f} MSps")
     print(f"  Pulse freq: {pulse_freq} Hz")
 
+    # Parse FTM logs - explicit or auto-detected
+    ftm_data = []
+    ftm_logs = getattr(args, 'ftm_logs', None) or []
+
+    # Auto-detect FTM logs in input directory if none specified
+    if not ftm_logs:
+        for name in ['slave1.log', 'slave2.log', 'master.log']:
+            auto_log = input_dir / name
+            if auto_log.exists():
+                ftm_logs.append(str(auto_log))
+
+    if ftm_logs:
+        from ftmio import parse_ftm_log, compute_ftm_stats
+        from datetime import datetime
+
+        # Get capture start time for alignment
+        capture_start = None
+        if 'start_time' in meta:
+            try:
+                capture_start = datetime.fromisoformat(meta['start_time'])
+            except ValueError:
+                pass
+
+        for log_path in ftm_logs:
+            print(f"  Loading FTM log: {log_path}")
+            parsed = parse_ftm_log(log_path)
+            parsed['stats'] = compute_ftm_stats(parsed['sessions'])
+            parsed['capture_start'] = capture_start
+            ftm_data.append(parsed)
+            print(f"    {parsed['label']}: {parsed['success_count']} ok, {parsed['failure_count']} failed")
+
     # Initialize readers
     reader_ref = EdgeFileReader(input_dir, channel=args.ref_channel)
     reader_target = EdgeFileReader(input_dir, channel=args.target_channel)
@@ -791,6 +822,17 @@ def analyze_edge_files(args):
     if n_ref == 0 or n_target == 0:
         print("Error: No edges to analyze")
         return 1
+
+    # Auto-detect common start time (handle late-starting channels)
+    edges_ref_first = reader_ref.read_range(0, 1)
+    edges_target_first = reader_target.read_range(0, 1)
+    start_ref = edges_ref_first[0]['time'] if len(edges_ref_first) > 0 else 0
+    start_target = edges_target_first[0]['time'] if len(edges_target_first) > 0 else 0
+    common_start = max(start_ref, start_target)
+
+    if common_start > min(start_ref, start_target):
+        skip_seconds = (common_start - min(start_ref, start_target)) / sample_rate
+        print(f"  Auto-skipping {skip_seconds:.3f}s to align channels")
 
     # Compute max delay threshold (10% of period)
     period_ns = 1e9 / pulse_freq
@@ -863,6 +905,10 @@ def analyze_edge_files(args):
             target_mask = target_batch['type'] == edge_type
             ref_times_batch = ref_batch['time'][ref_mask]
             target_times_batch = target_batch['time'][target_mask]
+
+            # Skip edges before common start time (handle late-starting channels)
+            ref_times_batch = ref_times_batch[ref_times_batch >= common_start]
+            target_times_batch = target_times_batch[target_times_batch >= common_start]
 
             total_ref_filtered += len(ref_times_batch)
             total_target_filtered += len(target_times_batch)
@@ -1083,6 +1129,7 @@ def analyze_edge_files(args):
         frequency_skew_ppm=skew_ppm,
         frequency_skew_ns_per_sec=skew_ns_per_sec,
         metadata=metadata,
+        ftm_data=ftm_data if ftm_data else None,
     )
 
     print(f"Plots saved to {output_dir}/")
@@ -1445,6 +1492,9 @@ def main():
                                  default='linreg',
                                  help='Edge detection algorithm (default: linreg for .cfile streaming). '
                                       'crossing uses simple threshold, linreg uses linear regression.')
+    p_analyze_edges.add_argument('--ftm-log', action='append', dest='ftm_logs',
+                                 metavar='FILE',
+                                 help='FTM log file from idf.py monitor (can specify multiple times)')
     p_analyze_edges.set_defaults(func=cmd_analyze_edges)
 
     args = parser.parse_args()
