@@ -440,12 +440,13 @@ static void ftm_poll_task(void *pvParameters)
         if (bits & FTM_REPORT_BIT) {
             process_ftm_report(&t1_unwrap, &t2_unwrap, &t3_unwrap, &t4_unwrap, &stats);
             stats.count = s_ftm_report_count;
+            stats.status = FTM_STATUS_SUCCESS;
         } else if (bits & FTM_FAILURE_BIT) {
             stats.count = 0;
             stats.status = s_ftm_status;
         } else {
             stats.count = 0;
-            stats.status = -100; // Timeout
+            stats.status = 250; // Timeout
         }
         log_ftm_stats(&stats);
 
