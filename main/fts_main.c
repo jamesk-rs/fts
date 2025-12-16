@@ -20,6 +20,10 @@
 #include "dtc.h"
 #endif
 
+#ifdef CONFIG_FTS_MQTT_ENABLED
+#include "fts_mqtt.h"
+#endif
+
 static const char *TAG = "fts_main";
 
 // --- LED for pulse output
@@ -39,6 +43,19 @@ static const char *TAG = "fts_main";
 
 // GPIO pulse output (2.5kHz 20% duty cycle)
 #define TOGGLE_GPIO GPIO_NUM_7
+
+#if defined(CONFIG_FTS_MQTT_ENABLED) && defined(CONFIG_FTS_MQTT_ENABLE_CONTROL)
+/**
+ * MQTT control callback - receives period corrections from RL engine
+ */
+static void mqtt_control_callback(int32_t period_correction_fp16,
+                                   float phase_error_ns, float gain_K)
+{
+    ESP_LOGI(TAG, "MQTT correction: %ld (phase_error=%.1fns, K=%.3f)",
+             (long)period_correction_fp16, phase_error_ns, gain_K);
+    dtc_apply_mqtt_correction(period_correction_fp16);
+}
+#endif
 
 /**
  * FTS callback - invoked in ISR context on each timer cycle
@@ -93,6 +110,23 @@ void app_main(void)
 
     // Initialize DTC (registers with CRM)
     ESP_ERROR_CHECK(dtc_init());
+
+#ifdef CONFIG_FTS_MQTT_ENABLED
+    // Initialize MQTT client for telemetry and control
+    fts_mqtt_config_t mqtt_cfg = {
+        .broker_uri = CONFIG_FTS_MQTT_BROKER_URI,
+        .device_id = CONFIG_FTS_MQTT_DEVICE_ID,
+#ifdef CONFIG_FTS_MQTT_ENABLE_CONTROL
+        .ctrl_cb = mqtt_control_callback,
+#else
+        .ctrl_cb = NULL,
+#endif
+    };
+    ESP_ERROR_CHECK(fts_mqtt_init(&mqtt_cfg));
+    ESP_ERROR_CHECK(fts_mqtt_start());
+    ESP_LOGI(TAG, "MQTT client started for device: %s", CONFIG_FTS_MQTT_DEVICE_ID);
+#endif
+
 #elif defined(CONFIG_FTS_ROLE_MASTER)
     // ========== MASTER MODE ==========
     // Initialize WiFi AP with FTM responder (starts WiFi, MAC clock, and sync broadcast)
@@ -106,6 +140,19 @@ void app_main(void)
 
     // Align timer to MAC clock epoch boundaries
     dtr_align_master_timer();
+
+#ifdef CONFIG_FTS_MQTT_ENABLED
+    // Initialize MQTT client for telemetry (master doesn't receive control)
+    fts_mqtt_config_t mqtt_cfg = {
+        .broker_uri = CONFIG_FTS_MQTT_BROKER_URI,
+        .device_id = CONFIG_FTS_MQTT_DEVICE_ID,
+        .ctrl_cb = NULL,
+    };
+    ESP_ERROR_CHECK(fts_mqtt_init(&mqtt_cfg));
+    ESP_ERROR_CHECK(fts_mqtt_start());
+    ESP_LOGI(TAG, "MQTT client started for device: %s", CONFIG_FTS_MQTT_DEVICE_ID);
+#endif
+
 #else
     #error "CONFIG_FTS_ROLE_MASTER or CONFIG_FTS_ROLE_SLAVE must be defined"
 #endif

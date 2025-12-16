@@ -28,6 +28,15 @@ esp_err_t dtc_init(void);
  */
 void dtc_crm_updated(void);
 
+#ifdef CONFIG_FTS_MQTT_ENABLE_CONTROL
+/**
+ * Apply period correction from MQTT RL engine
+ *
+ * @param period_correction_fp16 Correction in FP16 format (ticks * 65536)
+ */
+void dtc_apply_mqtt_correction(int32_t period_correction_fp16);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

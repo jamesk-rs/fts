@@ -93,4 +93,38 @@ menu "Time Synchronization Configuration"
                 WiFi channel for master AP
     endmenu
 
+    menu "MQTT Configuration"
+        config FTS_MQTT_ENABLED
+            bool "Enable MQTT Telemetry"
+            default n
+            help
+                Enable MQTT publishing of FTM reports and timing metrics
+                to a remote RL platform for real-time clock synchronization.
+
+        config FTS_MQTT_BROKER_URI
+            string "MQTT Broker URI"
+            default "mqtt://192.168.4.2:1883"
+            depends on FTS_MQTT_ENABLED
+            help
+                URI of the MQTT broker (e.g., mqtt://192.168.1.100:1883).
+                For slave devices, this should be reachable from the master's AP network.
+
+        config FTS_MQTT_DEVICE_ID
+            string "MQTT Device ID"
+            default "slave1"
+            depends on FTS_MQTT_ENABLED
+            help
+                Unique device identifier for MQTT topics (e.g., master, slave1, slave2).
+                Used in topic paths: fts/{device_id}/ftm, fts/{device_id}/metrics
+
+        config FTS_MQTT_ENABLE_CONTROL
+            bool "Enable MQTT Control (Period Corrections)"
+            default y
+            depends on FTS_MQTT_ENABLED && FTS_ROLE_SLAVE
+            help
+                Enable receiving period corrections from RL engine via MQTT.
+                Only applicable to slave devices. When enabled, the device subscribes
+                to fts/{device_id}/control and applies received period corrections.
+    endmenu
+
 endmenu

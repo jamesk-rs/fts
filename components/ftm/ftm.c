@@ -8,6 +8,10 @@
 #include "ftm.h"
 #include "crm.h"
 #include "clock.h"
+#ifdef CONFIG_FTS_MQTT_ENABLED
+#include "fts_mqtt.h"
+#include "esp_timer.h"
+#endif
 #include <limits.h>
 #include "esp_wifi.h"
 #include "esp_private/wifi.h"
@@ -449,6 +453,22 @@ static void ftm_poll_task(void *pvParameters)
             stats.status = 250; // Timeout
         }
         log_ftm_stats(&stats);
+
+#ifdef CONFIG_FTS_MQTT_ENABLED
+        // Publish FTM report via MQTT
+        if (stats.count > 0 && fts_mqtt_is_connected()) {
+            fts_mqtt_publish_ftm(
+                esp_timer_get_time(),
+                s_ftm_session_number,
+                (int32_t)stats.rtt_avg_ps,
+                (int8_t)stats.rssi_avg,
+                (uint32_t)(s_t1_ps[0] / 1000),  // Convert ps to ns for first entry
+                (uint32_t)(s_t2_ps[0] / 1000),
+                (uint32_t)(s_t3_ps[0] / 1000),
+                (uint32_t)(s_t4_ps[0] / 1000)
+            );
+        }
+#endif
 
         s_ftm_report_count = 0;
 
