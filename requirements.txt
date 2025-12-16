@@ -6,3 +6,5 @@ matplotlib
 seaborn
 scipy
 allantools
+bash_kernel
+numba
