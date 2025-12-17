@@ -13,7 +13,7 @@
 #include "esp_timer.h"
 #endif
 #include <limits.h>
-#include "esp_wifi.h"
+#include "esp_wifi.h"   
 #include "esp_private/wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -82,9 +82,11 @@ typedef struct {
 static EventGroupHandle_t s_ftm_event_group = NULL;
 static const int FTM_REPORT_BIT = BIT0;
 static const int FTM_FAILURE_BIT = BIT1;
+static const int FTM_GOT_IP_BIT = BIT2;
+static const int FTM_MASTER_MAC_BIT = BIT3;  // Master MAC received via ESP-NOW
 
 // FTM session tracking
-static uint8_t s_master_bssid[6] = {0};
+static uint8_t s_master_mac[6] = {0};
 static uint8_t s_ap_channel = 0;
 
 // Static FTM report buffer
@@ -153,13 +155,14 @@ static void ftm_sync_broadcast_task(void *arg)
 /**
  * Initialize ESP-NOW sync for master
  */
-static esp_err_t ftm_sync_master_init(uint8_t channel)
+static esp_err_t ftm_sync_master_init(uint8_t channel, wifi_interface_t ifidx)
 {
     esp_err_t ret;
 
     // Generate run_id
     s_run_id = esp_random();
-    ESP_LOGI(TAG, "Sync master init: run_id=0x%08lx, channel=%d", (unsigned long)s_run_id, channel);
+    ESP_LOGI(TAG, "Sync master init: run_id=0x%08lx, channel=%d, ifidx=%d",
+             (unsigned long)s_run_id, channel, ifidx);
 
     // Initialize ESP-NOW
     ret = esp_now_init();
@@ -176,10 +179,10 @@ static esp_err_t ftm_sync_master_init(uint8_t channel)
         return ret;
     }
 
-    // Add broadcast peer on AP's channel
+    // Add broadcast peer on the WiFi channel
     esp_now_peer_info_t peer = {
         .channel = channel,
-        .ifidx = WIFI_IF_AP,
+        .ifidx = ifidx,
         .encrypt = false,
     };
     memcpy(peer.peer_addr, s_broadcast_mac, 6);
@@ -227,6 +230,16 @@ static void ftm_sync_recv_cb(const esp_now_recv_info_t *info, const uint8_t *dat
 
     if (pkt->magic != FTM_SYNC_MAGIC) {
         return;
+    }
+
+    // Capture master's MAC from ESP-NOW packet (for FTM targeting)
+    EventBits_t bits = xEventGroupGetBits(s_ftm_event_group);
+    if (!(bits & FTM_MASTER_MAC_BIT)) {
+        memcpy(s_master_mac, info->src_addr, 6);
+        xEventGroupSetBits(s_ftm_event_group, FTM_MASTER_MAC_BIT);
+        ESP_LOGI(TAG, "Master MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+                 s_master_mac[0], s_master_mac[1], s_master_mac[2],
+                 s_master_mac[3], s_master_mac[4], s_master_mac[5]);
     }
 
     // Detect reboot: run_id changed
@@ -399,7 +412,13 @@ static void log_ftm_stats(const ftm_stats_t *stats)
  */
 static void ftm_poll_task(void *pvParameters)
 {
-    ESP_LOGI(TAG, "FTM poll task started");
+    ESP_LOGI(TAG, "FTM poll task started, waiting for master MAC...");
+
+    // Wait for master MAC from ESP-NOW (no timeout - wait forever)
+    xEventGroupWaitBits(s_ftm_event_group, FTM_MASTER_MAC_BIT,
+                        pdFALSE, pdTRUE, portMAX_DELAY);
+
+    ESP_LOGI(TAG, "Master MAC acquired, starting FTM sessions");
 
     // Prepare FTM configuration
     wifi_ftm_initiator_cfg_t ftm_cfg = {
@@ -407,7 +426,7 @@ static void ftm_poll_task(void *pvParameters)
         .burst_period = FTM_BURST_PERIOD,
         .use_get_report_api = true,
     };
-    memcpy(ftm_cfg.resp_mac, s_master_bssid, 6);
+    memcpy(ftm_cfg.resp_mac, s_master_mac, 6);
     ftm_cfg.channel = s_ap_channel;
 
     // Initialize unwrap state (original logic, no sync dependency)
@@ -418,9 +437,6 @@ static void ftm_poll_task(void *pvParameters)
 
     // Session statistics
     ftm_stats_t stats = {0};
-
-    // Track run_id for passive monitoring (warnings only)
-    uint32_t last_seen_run_id = 0;
 
     while (1) {
         // Run FTM session
@@ -460,12 +476,12 @@ static void ftm_poll_task(void *pvParameters)
             fts_mqtt_publish_ftm(
                 esp_timer_get_time(),
                 s_ftm_session_number,
-                (int32_t)stats.rtt_avg_ps,
+                stats.rtt_avg_ps,
                 (int8_t)stats.rssi_avg,
-                (uint32_t)(s_t1_ps[0] / 1000),  // Convert ps to ns for first entry
-                (uint32_t)(s_t2_ps[0] / 1000),
-                (uint32_t)(s_t3_ps[0] / 1000),
-                (uint32_t)(s_t4_ps[0] / 1000)
+                s_t1_ps[0],  // Full precision picoseconds
+                s_t2_ps[0],
+                s_t3_ps[0],
+                s_t4_ps[0]
             );
         }
 #endif
@@ -482,19 +498,31 @@ static void ftm_poll_task(void *pvParameters)
 // ============================================================================
 
 /**
- * WiFi event handler
+ * IP event handler - sets GOT_IP bit when IP is obtained
+ */
+static void ip_event_handler(void *arg, esp_event_base_t event_base,
+                             int32_t event_id, void *event_data)
+{
+    if (event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        xEventGroupSetBits(s_ftm_event_group, FTM_GOT_IP_BIT);
+    }
+}
+
+/**
+ * WiFi event handler (slave)
  */
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     if (event_id == WIFI_EVENT_STA_CONNECTED) {
         wifi_event_sta_connected_t *event = (wifi_event_sta_connected_t *)event_data;
-        ESP_LOGI(TAG, "Connected to master: SSID=%s, Channel=%d", event->ssid, event->channel);
-        memcpy(s_master_bssid, event->bssid, 6);
+        ESP_LOGI(TAG, "Connected to AP: SSID=%s, Channel=%d", event->ssid, event->channel);
         s_ap_channel = event->channel;
 
+        // Start FTM poll task (it will wait for master MAC internally)
         if (s_ftm_task_handle == NULL) {
-            // Clear stale event bits from previous session (e.g., FTM_STATUS_USER_TERM from disconnect)
             xEventGroupClearBits(s_ftm_event_group, FTM_REPORT_BIT | FTM_FAILURE_BIT);
             BaseType_t ret = xTaskCreate(ftm_poll_task, "ftm_poll", FTM_POLL_TASK_STACK_SIZE, NULL, FTM_POLL_TASK_PRIORITY, &s_ftm_task_handle);
             if (ret != pdPASS) {
@@ -502,10 +530,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             }
         }
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGI(TAG, "Disconnected from master, reconnecting...");
+        ESP_LOGI(TAG, "Disconnected, reconnecting...");
 
         if (s_ftm_task_handle != NULL) {
-            esp_wifi_ftm_end_session();  // Clean up any in-progress FTM session
+            esp_wifi_ftm_end_session();
             vTaskDelete(s_ftm_task_handle);
             s_ftm_task_handle = NULL;
         }
@@ -515,14 +543,15 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 // ============================================================================
-// Public API
+// Common initialization helper
 // ============================================================================
 
-esp_err_t ftm_master_init(const char *ssid, const char *password, uint8_t channel)
+/**
+ * Common WiFi initialization for all modes
+ */
+static esp_err_t ftm_wifi_init_common(wifi_mode_t mode)
 {
     esp_err_t ret;
-
-    ESP_LOGI(TAG, "Initializing FTM master (AP mode)...");
 
     // Initialize NVS
     ret = nvs_flash_init();
@@ -535,11 +564,109 @@ esp_err_t ftm_master_init(const char *ssid, const char *password, uint8_t channe
     // Initialize network interface
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_ap();
+    if (mode == WIFI_MODE_AP) {
+        esp_netif_create_default_wifi_ap();
+    } else {
+        esp_netif_create_default_wifi_sta();
+    }
 
     // Initialize WiFi
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(mode));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+
+    // Suppress verbose WiFi logs
+    esp_log_level_set("wifi", ESP_LOG_ERROR);
+
+    return ESP_OK;
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * WiFi event handler for master STA mode
+ */
+static void master_sta_event_handler(void *arg, esp_event_base_t event_base,
+                                      int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT) {
+        if (event_id == WIFI_EVENT_STA_CONNECTED) {
+            wifi_event_sta_connected_t *event = (wifi_event_sta_connected_t *)event_data;
+            ESP_LOGI(TAG, "Master connected to AP: SSID=%s, Channel=%d",
+                     event->ssid, event->channel);
+            s_ap_channel = event->channel;
+        } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+            ESP_LOGW(TAG, "Master disconnected from AP, reconnecting...");
+            esp_wifi_connect();
+        }
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "Master got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        if (s_ftm_event_group) {
+            xEventGroupSetBits(s_ftm_event_group, FTM_GOT_IP_BIT);
+        }
+    }
+}
+
+esp_err_t ftm_master_init_sta(const char *ssid, const char *password)
+{
+    ESP_LOGI(TAG, "Initializing FTM master (STA mode)...");
+
+    // Create event group
+    s_ftm_event_group = xEventGroupCreate();
+    if (!s_ftm_event_group) {
+        ESP_LOGE(TAG, "Failed to create event group");
+        return ESP_FAIL;
+    }
+
+    // Common WiFi init
+    ESP_ERROR_CHECK(ftm_wifi_init_common(WIFI_MODE_STA));
+
+    // Register event handlers
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                                &master_sta_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                                &master_sta_event_handler, NULL));
+
+    // Configure STA
+    wifi_config_t sta_config = {.sta = {.ssid = "", .password = ""}};
+    strlcpy((char *)sta_config.sta.ssid, ssid, sizeof(sta_config.sta.ssid));
+    strlcpy((char *)sta_config.sta.password, password, sizeof(sta_config.sta.password));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
+
+    // Start WiFi and connect
+    ESP_ERROR_CHECK(esp_wifi_start());
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    ESP_LOGI(TAG, "Master MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    ESP_ERROR_CHECK(esp_wifi_connect());
+
+    // Wait for IP
+    EventBits_t bits = xEventGroupWaitBits(s_ftm_event_group, FTM_GOT_IP_BIT,
+                                            pdFALSE, pdTRUE, pdMS_TO_TICKS(30000));
+    if (!(bits & FTM_GOT_IP_BIT)) {
+        ESP_LOGE(TAG, "Failed to connect within 30 seconds");
+        return ESP_FAIL;
+    }
+
+    // Initialize clock and ESP-NOW
+    ESP_ERROR_CHECK(clock_init());
+    ESP_ERROR_CHECK(ftm_sync_master_init(0, WIFI_IF_STA));
+
+    return ESP_OK;
+}
+
+esp_err_t ftm_master_init(const char *ssid, const char *password, uint8_t channel)
+{
+    ESP_LOGI(TAG, "Initializing FTM master (AP mode)...");
+
+    // Common WiFi init
+    ESP_ERROR_CHECK(ftm_wifi_init_common(WIFI_MODE_AP));
 
     // Configure AP with FTM responder
     wifi_config_t wifi_config = {
@@ -548,101 +675,60 @@ esp_err_t ftm_master_init(const char *ssid, const char *password, uint8_t channe
             .password = "",
             .ssid_len = strlen(ssid),
             .channel = channel,
-            .authmode = WIFI_AUTH_WPA2_PSK,
+            .authmode = strlen(password) ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN,
             .max_connection = 4,
             .ftm_responder = true,
         },
     };
     strlcpy((char *)wifi_config.ap.ssid, ssid, sizeof(wifi_config.ap.ssid));
     strlcpy((char *)wifi_config.ap.password, password, sizeof(wifi_config.ap.password));
-
-    if (strlen(password) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
-
-    // Suppress verbose WiFi FTM warnings
-    esp_log_level_set("wifi", ESP_LOG_ERROR);
 
     // Start WiFi
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "Master AP started: SSID='%s', Channel=%d", ssid, channel);
+    ESP_LOGI(TAG, "Master AP: SSID='%s', Channel=%d", ssid, channel);
 
-    // Initialize clock (must be after WiFi start and power save disable)
+    // Initialize clock and ESP-NOW
     ESP_ERROR_CHECK(clock_init());
-
-    // Initialize ESP-NOW sync broadcast
-    ESP_ERROR_CHECK(ftm_sync_master_init(channel));
+    ESP_ERROR_CHECK(ftm_sync_master_init(channel, WIFI_IF_AP));
 
     return ESP_OK;
 }
 
-esp_err_t ftm_slave_init(const char *master_ssid, const char *master_password)
+esp_err_t ftm_slave_init(const char *ssid, const char *password)
 {
-    esp_err_t ret;
+    ESP_LOGI(TAG, "Initializing FTM slave...");
 
-    ESP_LOGI(TAG, "Initializing FTM slave (STA mode)...");
-
-    // Create FTM event group
+    // Create event group
     s_ftm_event_group = xEventGroupCreate();
     if (!s_ftm_event_group) {
-        ESP_LOGE(TAG, "Failed to create FTM event group");
+        ESP_LOGE(TAG, "Failed to create event group");
         return ESP_FAIL;
     }
 
-    // Initialize NVS
-    ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
-    // Initialize network interface
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
-
-    // Initialize WiFi
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    // Common WiFi init
+    ESP_ERROR_CHECK(ftm_wifi_init_common(WIFI_MODE_STA));
 
     // Register event handlers
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_FTM_REPORT, &ftm_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &ip_event_handler, NULL));
 
     // Configure STA
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = "",
-            .password = "",
-        },
-    };
-    strlcpy((char *)wifi_config.sta.ssid, master_ssid, sizeof(wifi_config.sta.ssid));
-    strlcpy((char *)wifi_config.sta.password, master_password, sizeof(wifi_config.sta.password));
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    wifi_config_t wifi_config = {.sta = {.ssid = "", .password = ""}};
+    strlcpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
+    strlcpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
-    // Suppress verbose WiFi FTM warnings
-    esp_log_level_set("wifi", ESP_LOG_ERROR);
-
-    // Start WiFi and connect
+    // Start WiFi
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "Slave STA started: SSID='%s'", master_ssid);
+    ESP_LOGI(TAG, "Slave connecting to: '%s'", ssid);
 
-    // Initialize clock (must be after WiFi start and power save disable)
+    // Initialize clock and ESP-NOW
     ESP_ERROR_CHECK(clock_init());
-
-    // Initialize ESP-NOW sync receiver
     ESP_ERROR_CHECK(ftm_sync_slave_init());
 
+    // Connect
     ESP_ERROR_CHECK(esp_wifi_connect());
 
 #ifdef CONFIG_FTS_CSV_OUTPUT
@@ -671,4 +757,21 @@ esp_err_t ftm_deinit(void)
     esp_now_deinit();
 
     return ESP_OK;
+}
+
+esp_err_t ftm_wait_for_ip(uint32_t timeout_ms)
+{
+    if (s_ftm_event_group == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    EventBits_t bits = xEventGroupWaitBits(s_ftm_event_group,
+                                           FTM_GOT_IP_BIT,
+                                           false, true,
+                                           pdMS_TO_TICKS(timeout_ms));
+
+    if (bits & FTM_GOT_IP_BIT) {
+        return ESP_OK;
+    }
+    return ESP_ERR_TIMEOUT;
 }

@@ -1,5 +1,6 @@
 BUILDDIR_MASTER=build_master
-BUILDDIR_SLAVE=build_slave
+BUILDDIR_SLAVE_1=build_slave1
+BUILDDIR_SLAVE_2=build_slave2
 
 # include config.local file in the same directory
 _config_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"

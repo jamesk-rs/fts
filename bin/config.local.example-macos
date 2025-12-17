@@ -1,6 +1,10 @@
 # ESP-IDF setup
 ESP_IDF_EXPORT=~/esp/esp-idf/export.sh
 
+# --- WiFi Configuration ---
+WIFI_SSID="your_wifi_ssid"
+WIFI_PASSWORD="your_wifi_password"
+
 # --- map the dev boards to roles ---
 SERIAL_PORT_MASTER=/dev/cu.usbmodem11101
 SERIAL_PORT_SLAVE_1=/dev/cu.usbmodem11201

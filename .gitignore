@@ -4,17 +4,19 @@ dependencies.lock
 **/.ipynb_checkpoints/
 **/*.pyc
 **/__pycache__/
+**/.*.swp
+**/.~lock.*#
+.DS_Store
+
 .venv/
 
 data/
-build_master/
-build_master_c3/
-build_slave/
+build_*/
 build/
+
 .clangd
 sdkconfig
-**/.*.swp
-docs/fts-presa-extracted
-**/.~lock.*#
-.DS_Store
+sdkconfig.local
 bin/config.local
+
+docs/fts-presa-extracted

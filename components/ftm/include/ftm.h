@@ -44,7 +44,10 @@ typedef struct {
 typedef void (*ftm_callback_t)(const ftm_report_t *report);
 
 /**
- * Initialize FTM master (WiFi AP with FTM responder)
+ * Initialize FTM master in AP mode (WiFi AP with FTM responder)
+ *
+ * Master creates its own AP for slaves to connect. Use this when you want
+ * an isolated FTM network without external connectivity.
  *
  * @param ssid AP SSID
  * @param password AP password
@@ -54,13 +57,26 @@ typedef void (*ftm_callback_t)(const ftm_report_t *report);
 esp_err_t ftm_master_init(const char *ssid, const char *password, uint8_t channel);
 
 /**
- * Initialize FTM slave (connect to master AP and run FTM sessions)
+ * Initialize FTM master in STA mode (connects to external WiFi)
  *
- * @param master_ssid AP SSID to connect to
- * @param master_password AP password
+ * Master connects to external network like slaves do. This allows master to
+ * reach external services (MQTT, etc). ESP-NOW sync still works. FTM is not
+ * available in this mode (requires AP).
+ *
+ * @param ssid WiFi SSID to connect to
+ * @param password WiFi password
  * @return ESP_OK on success
  */
-esp_err_t ftm_slave_init(const char *master_ssid, const char *master_password);
+esp_err_t ftm_master_init_sta(const char *ssid, const char *password);
+
+/**
+ * Initialize FTM slave (connect to AP and run FTM sessions)
+ *
+ * @param ssid AP SSID to connect to
+ * @param password AP password
+ * @return ESP_OK on success
+ */
+esp_err_t ftm_slave_init(const char *ssid, const char *password);
 
 /**
  * Register callback for FTM reports
@@ -73,6 +89,14 @@ void ftm_register_callback(ftm_callback_t callback);
  * Deinitialize FTM module
  */
 esp_err_t ftm_deinit(void);
+
+/**
+ * Wait for IP address to be obtained
+ *
+ * @param timeout_ms Maximum time to wait in milliseconds
+ * @return ESP_OK if IP obtained, ESP_ERR_TIMEOUT if timeout
+ */
+esp_err_t ftm_wait_for_ip(uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

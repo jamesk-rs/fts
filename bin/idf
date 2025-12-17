@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
-        master|slave|slave1|slave2|all-slaves|all|both)
+        master|slave1|slave2|slaves|all)
             TARGETS+=("$1")
             shift
             ;;
@@ -58,12 +58,10 @@ while [[ $# -gt 0 ]]; do
             echo "    -o DATADIR  - Log monitor output to DATADIR/{slave1,slave2}.log"
             echo "  Targets (can specify multiple):"
             echo "    master      - Master device only"
-            echo "    slave       - Slave firmware (build) or slave1 (flash/monitor)"
             echo "    slave1      - Slave 1 only"
             echo "    slave2      - Slave 2 only"
-            echo "    all-slaves  - All slave devices"
+            echo "    slaves      - All slave devices"
             echo "    all         - All devices (master + all slaves) [default]"
-            echo "    both        - Alias for 'all' (backward compatible)"
             echo "  If no actions specified, defaults to 'build'"
             echo "  If no targets specified, defaults to 'all'"
             exit 1
@@ -85,35 +83,56 @@ has_target() {
     return 1
 }
 
-# Expand 'both' to 'all'
-for i in "${!TARGETS[@]}"; do
-    [[ "${TARGETS[$i]}" == "both" ]] && TARGETS[$i]="all"
-done
-
 cd "$PROJECT_DIR"
+
+# Generate sdkconfig.local from config.local WiFi settings
+if [[ -n "$WIFI_SSID" && -n "$WIFI_PASSWORD" ]]; then
+    cat > sdkconfig.local <<EOF
+# Auto-generated from bin/config.local - DO NOT EDIT
+CONFIG_FTS_WIFI_SSID="$WIFI_SSID"
+CONFIG_FTS_WIFI_PASSWORD="$WIFI_PASSWORD"
+EOF
+    echo "Generated sdkconfig.local with WiFi: $WIFI_SSID"
+fi
 
 # Determine which firmware types are needed
 NEED_MASTER=false
-NEED_SLAVE=false
+NEED_SLAVE1=false
+NEED_SLAVE2=false
 
 if has_target "all" || has_target "master"; then
     NEED_MASTER=true
 fi
-if has_target "all" || has_target "all-slaves" || has_target "slave" || has_target "slave1" || has_target "slave2"; then
-    NEED_SLAVE=true
+if has_target "all" || has_target "slaves" || has_target "slave1"; then
+    NEED_SLAVE1=true
+fi
+if has_target "all" || has_target "slaves" || has_target "slave2"; then
+    NEED_SLAVE2=true
 fi
 
 # Function to clean/build a firmware type
 build_firmware() {
-    local fw_type=$1  # "master" or "slave"
+    local fw_type=$1  # "master", "slave1", or "slave2"
     local build_dir sdkconfig_defaults
 
-    if [[ "$fw_type" == "master" ]]; then
-        build_dir="$BUILDDIR_MASTER"
-        sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_master"
-    else
-        build_dir="$BUILDDIR_SLAVE"
-        sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave"
+    case "$fw_type" in
+        master)
+            build_dir="$BUILDDIR_MASTER"
+            sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_master"
+            ;;
+        slave1)
+            build_dir="$BUILDDIR_SLAVE_1"
+            sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave1"
+            ;;
+        slave2)
+            build_dir="$BUILDDIR_SLAVE_2"
+            sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave2"
+            ;;
+    esac
+
+    # Append sdkconfig.local if it exists (WiFi credentials from config.local)
+    if [[ -f "sdkconfig.local" ]]; then
+        sdkconfig_defaults="$sdkconfig_defaults;sdkconfig.local"
     fi
 
     echo ""
@@ -150,8 +169,11 @@ if [[ "$DO_CLEAN" == true || "$DO_BUILD" == true ]]; then
     if [[ "$NEED_MASTER" == true ]]; then
         build_firmware "master"
     fi
-    if [[ "$NEED_SLAVE" == true ]]; then
-        build_firmware "slave"
+    if [[ "$NEED_SLAVE1" == true ]]; then
+        build_firmware "slave1"
+    fi
+    if [[ "$NEED_SLAVE2" == true ]]; then
+        build_firmware "slave2"
     fi
 fi
 
@@ -163,11 +185,11 @@ if [[ "$DO_FLASH" == true ]]; then
     fi
 
     # Flash slave devices
-    if has_target "all" || has_target "all-slaves" || has_target "slave" || has_target "slave1"; then
-        flash_device "SLAVE 1" "$BUILDDIR_SLAVE" "$SERIAL_PORT_SLAVE_1"
+    if has_target "all" || has_target "slaves" || has_target "slave1"; then
+        flash_device "SLAVE 1" "$BUILDDIR_SLAVE_1" "$SERIAL_PORT_SLAVE_1"
     fi
-    if has_target "all" || has_target "all-slaves" || has_target "slave2"; then
-        flash_device "SLAVE 2" "$BUILDDIR_SLAVE" "$SERIAL_PORT_SLAVE_2"
+    if has_target "all" || has_target "slaves" || has_target "slave2"; then
+        flash_device "SLAVE 2" "$BUILDDIR_SLAVE_2" "$SERIAL_PORT_SLAVE_2"
     fi
 fi
 
@@ -183,10 +205,10 @@ if [[ "$DO_MONITOR" == true ]]; then
         MON_MASTER=true; MON_SLAVE1=true; MON_SLAVE2=true
     else
         has_target "master" && MON_MASTER=true
-        if has_target "all-slaves"; then
+        if has_target "slaves"; then
             MON_SLAVE1=true; MON_SLAVE2=true
         else
-            (has_target "slave" || has_target "slave1") && MON_SLAVE1=true
+            has_target "slave1" && MON_SLAVE1=true
             has_target "slave2" && MON_SLAVE2=true
         fi
     fi
@@ -219,13 +241,13 @@ if [[ "$DO_MONITOR" == true ]]; then
             . $ESP_IDF_EXPORT > /dev/null 2>&1
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave1.log"
-            stdbuf -oL idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_1 monitor 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
+            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_1 -p $SERIAL_PORT_SLAVE_1 monitor 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
         elif $MON_SLAVE2; then
             echo "Monitoring SLAVE 2..."
             . $ESP_IDF_EXPORT > /dev/null 2>&1
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave2.log"
-            stdbuf -oL idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_2 monitor 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
+            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_2 -p $SERIAL_PORT_SLAVE_2 monitor 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
         fi
     else
         # Multiple monitors - use tmux
@@ -256,7 +278,7 @@ if [[ "$DO_MONITOR" == true ]]; then
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave1.log'"
             tmux send-keys -t fts_monitor \
-                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_1 monitor 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_1 -p $SERIAL_PORT_SLAVE_1 monitor 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
         fi
 
         if $MON_SLAVE2; then
@@ -268,7 +290,7 @@ if [[ "$DO_MONITOR" == true ]]; then
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave2.log'"
             tmux send-keys -t fts_monitor \
-                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE -p $SERIAL_PORT_SLAVE_2 monitor 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_2 -p $SERIAL_PORT_SLAVE_2 monitor 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
         fi
 
         # Balance panes and attach

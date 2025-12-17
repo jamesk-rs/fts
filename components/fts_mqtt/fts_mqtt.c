@@ -12,6 +12,7 @@
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 static const char *TAG = "fts_mqtt";
 
@@ -90,8 +91,18 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         case MQTT_EVENT_ERROR:
             ESP_LOGE(TAG, "MQTT error");
             if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
-                ESP_LOGE(TAG, "Transport error: %s",
-                         strerror(event->error_handle->esp_transport_sock_errno));
+                if (event->error_handle->esp_transport_sock_errno != 0) {
+                    ESP_LOGE(TAG, "Transport error: %s (errno=%d)",
+                             strerror(event->error_handle->esp_transport_sock_errno),
+                             event->error_handle->esp_transport_sock_errno);
+                }
+                if (event->error_handle->esp_tls_last_esp_err != 0) {
+                    ESP_LOGE(TAG, "TLS error: 0x%x",
+                             (unsigned int)event->error_handle->esp_tls_last_esp_err);
+                }
+            } else if (event->error_handle->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED) {
+                ESP_LOGE(TAG, "Connection refused, error: 0x%x",
+                         event->error_handle->connect_return_code);
             }
             break;
 
@@ -180,9 +191,9 @@ bool fts_mqtt_is_connected(void)
 }
 
 esp_err_t fts_mqtt_publish_ftm(int64_t ts_us, uint32_t session_id,
-                                int32_t rtt_ps, int8_t rssi,
-                                uint32_t t1, uint32_t t2,
-                                uint32_t t3, uint32_t t4)
+                                int64_t rtt_ps, int8_t rssi,
+                                int64_t t1, int64_t t2,
+                                int64_t t3, int64_t t4)
 {
     if (!s_connected) {
         return ESP_ERR_INVALID_STATE;
@@ -193,15 +204,21 @@ esp_err_t fts_mqtt_publish_ftm(int64_t ts_us, uint32_t session_id,
         return ESP_ERR_NO_MEM;
     }
 
-    // Add fields
+    // Add fields - use strings for 64-bit integers to preserve precision
+    char buf[24];
     cJSON_AddNumberToObject(json, "ts", (double)ts_us / 1e6);
     cJSON_AddNumberToObject(json, "session_id", session_id);
-    cJSON_AddNumberToObject(json, "rtt_ps", rtt_ps);
+    snprintf(buf, sizeof(buf), "%" PRId64, rtt_ps);
+    cJSON_AddStringToObject(json, "rtt_ps", buf);
     cJSON_AddNumberToObject(json, "rssi", rssi);
-    cJSON_AddNumberToObject(json, "t1", t1);
-    cJSON_AddNumberToObject(json, "t2", t2);
-    cJSON_AddNumberToObject(json, "t3", t3);
-    cJSON_AddNumberToObject(json, "t4", t4);
+    snprintf(buf, sizeof(buf), "%" PRId64, t1);
+    cJSON_AddStringToObject(json, "t1", buf);
+    snprintf(buf, sizeof(buf), "%" PRId64, t2);
+    cJSON_AddStringToObject(json, "t2", buf);
+    snprintf(buf, sizeof(buf), "%" PRId64, t3);
+    cJSON_AddStringToObject(json, "t3", buf);
+    snprintf(buf, sizeof(buf), "%" PRId64, t4);
+    cJSON_AddStringToObject(json, "t4", buf);
 
     char *payload = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);

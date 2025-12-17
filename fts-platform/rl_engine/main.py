@@ -159,17 +159,18 @@ class RLEngine:
     def _process_ftm(self, device_id: str, payload: dict):
         """Process FTM report from device."""
         state = self._get_or_create_state(device_id)
-        ts = payload.get("ts", time.time())
+        now = time.time()
+        device_ts = payload.get("ts", now)
 
         # Update state
-        state.last_ftm_ts = ts
+        state.last_ftm_ts = now
         state.ftm_buffer.append(payload)
 
-        # Keep only recent FTM reports
-        cutoff = ts - 1.0
+        # Keep only recent FTM reports (use device_ts for relative comparison)
+        cutoff = device_ts - 1.0
         state.ftm_buffer = [f for f in state.ftm_buffer if f.get("ts", 0) > cutoff]
 
-        # Store in InfluxDB
+        # Store in InfluxDB with current wall-clock time
         point = (
             Point("ftm")
             .tag("device", device_id)
@@ -179,7 +180,8 @@ class RLEngine:
             .field("t2", payload.get("t2", 0))
             .field("t3", payload.get("t3", 0))
             .field("t4", payload.get("t4", 0))
-            .time(int(ts * 1e9))
+            .field("device_ts", device_ts)
+            .time(int(now * 1e9))
         )
         self._write_influx(point)
 
@@ -197,20 +199,22 @@ class RLEngine:
     def _process_metrics(self, device_id: str, payload: dict):
         """Process timing metrics from device."""
         state = self._get_or_create_state(device_id)
-        ts = payload.get("ts", time.time())
+        now = time.time()
+        device_ts = payload.get("ts", now)
 
         # Update state
-        state.last_metrics_ts = ts
+        state.last_metrics_ts = now
         state.period_ticks = payload.get("period_ticks", state.period_ticks)
 
-        # Store in InfluxDB
+        # Store in InfluxDB with current wall-clock time
         point = (
             Point("metrics")
             .tag("device", device_id)
             .field("cycle_counter", payload.get("cycle_counter", 0))
             .field("period_ticks", payload.get("period_ticks", 0))
             .field("period_delta", payload.get("period_delta", 0))
-            .time(int(ts * 1e9))
+            .field("device_ts", device_ts)
+            .time(int(now * 1e9))
         )
         self._write_influx(point)
 

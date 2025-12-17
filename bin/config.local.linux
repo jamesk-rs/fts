@@ -1,6 +1,10 @@
 # ESP-IDF setup
 ESP_IDF_EXPORT=~/esp/esp-idf/export.sh
 
+# --- WiFi Configuration ---
+WIFI_SSID="your_wifi_ssid"
+WIFI_PASSWORD="your_wifi_password"
+
 # --- define serial numbers of all dev boards you have ---
 # can use `lsusb -v -d 303a:1001` to find these
 

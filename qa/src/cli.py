@@ -13,6 +13,7 @@ Commands (all use working directory as positional argument):
     analyze-edges <dir>   - Analyze edge files (streaming, memory-efficient)
                             Reads: edges_*.bin; Outputs: reports in same dir or -o <dir>
     stream                - Continuous capture with live jitter feedback (no files)
+    stream-mqtt           - Continuous capture with MQTT publishing to RL engine
     generate              - Generate test signals on USRP TX
 """
 
@@ -230,6 +231,165 @@ def cmd_capture(args):
         json.dump(metadata, f, indent=2)
 
     print("Done.")
+    return 0
+
+
+def cmd_stream_mqtt(args):
+    """Continuous capture with live MQTT publishing to RL engine"""
+    from capture.usrp import USRPCapture
+    from detect import StreamingCrossingDetector
+    from analyze import match_edges
+    from analyze.stats import compute_stats
+    from sdr_publisher import SDRPublisher
+    import time
+
+    print(f"Streaming capture with MQTT publishing...")
+    print(f"  Duration: {args.duration}s")
+    print(f"  Sample rate: {args.sample_rate/1e6:.1f} MSps")
+    print(f"  Pulse freq: {args.pulse_freq} Hz")
+    print(f"  Threshold: {args.threshold}")
+    print(f"  MQTT broker: {args.mqtt_host}:{args.mqtt_port}")
+
+    # Connect to MQTT broker
+    try:
+        publisher = SDRPublisher(args.mqtt_host, args.mqtt_port)
+    except ConnectionError as e:
+        print(f"Error: {e}")
+        return 1
+
+    # Compute min_distance from pulse frequency
+    samples_per_period = args.sample_rate / args.pulse_freq
+    min_distance = int(samples_per_period * 0.4)
+
+    # Initialize detectors (one per channel)
+    detector_a = StreamingCrossingDetector(
+        threshold=args.threshold,
+        min_distance=min_distance,
+        skip_samples=int(0.1 * args.sample_rate),  # Skip first 100ms
+    )
+    detector_b = StreamingCrossingDetector(
+        threshold=args.threshold,
+        min_distance=min_distance,
+        skip_samples=int(0.1 * args.sample_rate),
+    )
+
+    # Accumulators for edges (use falling edges - more reliable for AC-coupled)
+    all_falling_a = []
+    all_falling_b = []
+
+    chunk_count = 0
+    start_time = time.time()
+    last_report_time = start_time
+    edges_published = 0
+    last_published_time = 0  # Track last published edge time to avoid duplicates
+
+    def process_chunk(data):
+        nonlocal chunk_count, last_report_time, edges_published, last_published_time
+
+        chan_a = data.real
+        chan_b = data.imag
+
+        # Detect edges in this chunk (returns Nx2 array: [[time, type], ...])
+        edges_a = detector_a.process(chan_a)
+        edges_b = detector_b.process(chan_b)
+
+        # Accumulate falling edges (type == 1)
+        falling_a = edges_a[edges_a[:, 1] == 1, 0] if len(edges_a) > 0 else np.array([])
+        falling_b = edges_b[edges_b[:, 1] == 1, 0] if len(edges_b) > 0 else np.array([])
+        if len(falling_a) > 0:
+            all_falling_a.append(falling_a)
+        if len(falling_b) > 0:
+            all_falling_b.append(falling_b)
+
+        chunk_count += 1
+
+        # Match edges and publish to MQTT
+        if len(falling_a) > 0 and len(falling_b) > 0:
+            # Get recent edges for matching
+            recent_a = np.concatenate(all_falling_a[-10:]) if all_falling_a else np.array([])
+            recent_b = np.concatenate(all_falling_b[-10:]) if all_falling_b else np.array([])
+
+            if len(recent_a) > 0 and len(recent_b) > 0:
+                matched_a, matched_b, delays = match_edges(
+                    recent_a, recent_b, args.sample_rate, pulse_freq=args.pulse_freq
+                )
+
+                # Publish only new matches to MQTT (avoid duplicates)
+                for t_a, t_b, delay_ns in zip(matched_a, matched_b, delays):
+                    # Skip already published edges
+                    if t_a <= last_published_time:
+                        continue
+                    # Convert sample times to nanoseconds
+                    ch_a_ns = int(t_a / args.sample_rate * 1e9)
+                    ch_b_ns = int(t_b / args.sample_rate * 1e9)
+                    if publisher.publish_edge(ch_a_ns, ch_b_ns):
+                        edges_published += 1
+                        last_published_time = t_a
+
+        # Report every second
+        now = time.time()
+        if now - last_report_time >= 1.0:
+            elapsed = now - start_time
+            samples = detector_a.samples_processed
+            n_falling_a = sum(len(x) for x in all_falling_a)
+            n_falling_b = sum(len(x) for x in all_falling_b)
+
+            # Compute jitter stats if we have enough edges
+            if n_falling_a > 10 and n_falling_b > 10:
+                times_a = np.concatenate(all_falling_a) if all_falling_a else np.array([])
+                times_b = np.concatenate(all_falling_b) if all_falling_b else np.array([])
+                _, _, delays = match_edges(times_a, times_b, args.sample_rate)
+
+                if len(delays) > 0:
+                    stats = compute_stats(delays, args.pulse_freq)
+                    print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
+                          f"{len(delays)} edges, published={edges_published}, "
+                          f"mean={stats.mean_ns:+.1f}ns, std={stats.std_ns:.1f}ns")
+                else:
+                    print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
+                          f"edges: A={n_falling_a}, B={n_falling_b}, published={edges_published}")
+            else:
+                print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
+                      f"edges: A={n_falling_a}, B={n_falling_b}, published={edges_published}")
+
+            last_report_time = now
+
+        return True  # Continue streaming
+
+    # Start capture
+    capture = USRPCapture(
+        sample_rate=args.sample_rate,
+        freq=args.freq,
+        gain=args.gain,
+    )
+
+    try:
+        capture.stream(
+            callback=process_chunk,
+            chunk_samples=int(args.sample_rate * 0.01),  # 10ms chunks
+            duration=args.duration,
+        )
+    except KeyboardInterrupt:
+        print("\nStopped by user.")
+    finally:
+        publisher.close()
+
+    # Final stats
+    print("\n--- Final Statistics ---")
+    times_a = np.concatenate(all_falling_a) if all_falling_a else np.array([])
+    times_b = np.concatenate(all_falling_b) if all_falling_b else np.array([])
+
+    if len(times_a) > 0 and len(times_b) > 0:
+        _, _, delays = match_edges(times_a, times_b, args.sample_rate)
+        if len(delays) > 0:
+            stats = compute_stats(delays, args.pulse_freq)
+            print(f"Total samples: {detector_a.samples_processed:,}")
+            print(f"Total edge pairs: {len(delays)}")
+            print(f"Total published: {edges_published}")
+            print(stats)
+    else:
+        print("No edges detected.")
+
     return 0
 
 
@@ -1484,6 +1644,27 @@ def main():
     p_stream.add_argument('--threshold', type=float, default=0.4,
                          help='Threshold for edge detection (default: 0.4)')
     p_stream.set_defaults(func=cmd_stream)
+
+    # stream-mqtt command
+    p_stream_mqtt = subparsers.add_parser('stream-mqtt',
+        help='Continuous capture with MQTT publishing to RL engine')
+    p_stream_mqtt.add_argument('-d', '--duration', type=float, default=60,
+                               help='Duration in seconds (default: 60)')
+    p_stream_mqtt.add_argument('-r', '--sample-rate', type=float, default=10e6,
+                               help='Sample rate in Hz (default: 10e6)')
+    p_stream_mqtt.add_argument('-f', '--freq', type=float, default=0,
+                               help='Center frequency (default: 0)')
+    p_stream_mqtt.add_argument('-g', '--gain', type=float, default=0,
+                               help='RX gain (default: 0)')
+    p_stream_mqtt.add_argument('--pulse-freq', type=float, default=2000,
+                               help='Pulse frequency in Hz (default: 2000)')
+    p_stream_mqtt.add_argument('--threshold', type=float, default=0.4,
+                               help='Threshold for edge detection (default: 0.4)')
+    p_stream_mqtt.add_argument('--mqtt-host', default='localhost',
+                               help='MQTT broker host (default: localhost)')
+    p_stream_mqtt.add_argument('--mqtt-port', type=int, default=1883,
+                               help='MQTT broker port (default: 1883)')
+    p_stream_mqtt.set_defaults(func=cmd_stream_mqtt)
 
     # generate command
     p_generate = subparsers.add_parser('generate',

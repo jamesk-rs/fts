@@ -78,9 +78,9 @@ bool fts_mqtt_is_connected(void);
  * @return ESP_OK on success
  */
 esp_err_t fts_mqtt_publish_ftm(int64_t ts_us, uint32_t session_id,
-                                int32_t rtt_ps, int8_t rssi,
-                                uint32_t t1, uint32_t t2,
-                                uint32_t t3, uint32_t t4);
+                                int64_t rtt_ps, int8_t rssi,
+                                int64_t t1, int64_t t2,
+                                int64_t t3, int64_t t4);
 
 /**
  * Publish timing metrics
