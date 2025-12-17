@@ -94,6 +94,26 @@ esp_err_t fts_mqtt_publish_ftm(int64_t ts_us, uint32_t session_id,
 esp_err_t fts_mqtt_publish_metrics(int64_t ts_us, int64_t cycle_counter,
                                     int32_t period_ticks, int32_t period_delta);
 
+/**
+ * Publish FTM session statistics
+ *
+ * @param ts_us Timestamp in microseconds
+ * @param session_id FTM session ID
+ * @param status FTM status code
+ * @param count Number of valid entries
+ * @param rtt_avg_ps Average RTT in picoseconds
+ * @param rtt_min_ps Minimum RTT in picoseconds
+ * @param rtt_max_ps Maximum RTT in picoseconds
+ * @param rssi_avg Average RSSI
+ * @param rssi_min Minimum RSSI
+ * @param rssi_max Maximum RSSI
+ * @return ESP_OK on success
+ */
+esp_err_t fts_mqtt_publish_ftm_stats(int64_t ts_us, uint32_t session_id,
+                                      uint8_t status, uint8_t count,
+                                      int64_t rtt_avg_ps, int64_t rtt_min_ps, int64_t rtt_max_ps,
+                                      int32_t rssi_avg, int8_t rssi_min, int8_t rssi_max);
+
 #ifdef __cplusplus
 }
 #endif

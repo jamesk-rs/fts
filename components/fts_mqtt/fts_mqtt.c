@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <stdint.h>
 
 static const char *TAG = "fts_mqtt";
 
@@ -24,6 +25,7 @@ static bool s_connected = false;
 
 // Topic buffers
 static char s_topic_ftm[64];
+static char s_topic_ftm_stats[64];
 static char s_topic_metrics[64];
 static char s_topic_control[64];
 
@@ -124,6 +126,7 @@ esp_err_t fts_mqtt_init(const fts_mqtt_config_t *config)
 
     // Build topic names
     snprintf(s_topic_ftm, sizeof(s_topic_ftm), "fts/%s/ftm", s_device_id);
+    snprintf(s_topic_ftm_stats, sizeof(s_topic_ftm_stats), "fts/%s/ftm_stats", s_device_id);
     snprintf(s_topic_metrics, sizeof(s_topic_metrics), "fts/%s/metrics", s_device_id);
     snprintf(s_topic_control, sizeof(s_topic_control), "fts/%s/control", s_device_id);
 
@@ -208,8 +211,10 @@ esp_err_t fts_mqtt_publish_ftm(int64_t ts_us, uint32_t session_id,
     char buf[24];
     cJSON_AddNumberToObject(json, "ts", (double)ts_us / 1e6);
     cJSON_AddNumberToObject(json, "session_id", session_id);
-    snprintf(buf, sizeof(buf), "%" PRId64, rtt_ps);
-    cJSON_AddStringToObject(json, "rtt_ps", buf);
+    // RTT fits in int32, clamp and send as number for simpler handling
+    int32_t rtt_clamped = (rtt_ps > INT32_MAX) ? INT32_MAX :
+                          (rtt_ps < INT32_MIN) ? INT32_MIN : (int32_t)rtt_ps;
+    cJSON_AddNumberToObject(json, "rtt_ps", rtt_clamped);
     cJSON_AddNumberToObject(json, "rssi", rssi);
     snprintf(buf, sizeof(buf), "%" PRId64, t1);
     cJSON_AddStringToObject(json, "t1", buf);
@@ -262,6 +267,56 @@ esp_err_t fts_mqtt_publish_metrics(int64_t ts_us, int64_t cycle_counter,
     // QoS 0 for metrics (high frequency, loss acceptable)
     int msg_id = esp_mqtt_client_publish(s_mqtt_client, s_topic_metrics,
                                           payload, 0, 0, 0);
+    free(payload);
+
+    return (msg_id >= 0) ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t fts_mqtt_publish_ftm_stats(int64_t ts_us, uint32_t session_id,
+                                      uint8_t status, uint8_t count,
+                                      int64_t rtt_avg_ps, int64_t rtt_min_ps, int64_t rtt_max_ps,
+                                      int32_t rssi_avg, int8_t rssi_min, int8_t rssi_max)
+{
+    if (!s_connected) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *json = cJSON_CreateObject();
+    if (json == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Add fields - RTT values clamped to int32 range
+    cJSON_AddNumberToObject(json, "ts", (double)ts_us / 1e6);
+    cJSON_AddNumberToObject(json, "session_id", session_id);
+    cJSON_AddNumberToObject(json, "status", status);
+    cJSON_AddNumberToObject(json, "count", count);
+
+    // Clamp RTT values to int32 range
+    int32_t rtt_avg_clamped = (rtt_avg_ps > INT32_MAX) ? INT32_MAX :
+                              (rtt_avg_ps < INT32_MIN) ? INT32_MIN : (int32_t)rtt_avg_ps;
+    int32_t rtt_min_clamped = (rtt_min_ps > INT32_MAX) ? INT32_MAX :
+                              (rtt_min_ps < INT32_MIN) ? INT32_MIN : (int32_t)rtt_min_ps;
+    int32_t rtt_max_clamped = (rtt_max_ps > INT32_MAX) ? INT32_MAX :
+                              (rtt_max_ps < INT32_MIN) ? INT32_MIN : (int32_t)rtt_max_ps;
+
+    cJSON_AddNumberToObject(json, "rtt_avg_ps", rtt_avg_clamped);
+    cJSON_AddNumberToObject(json, "rtt_min_ps", rtt_min_clamped);
+    cJSON_AddNumberToObject(json, "rtt_max_ps", rtt_max_clamped);
+    cJSON_AddNumberToObject(json, "rssi_avg", rssi_avg);
+    cJSON_AddNumberToObject(json, "rssi_min", rssi_min);
+    cJSON_AddNumberToObject(json, "rssi_max", rssi_max);
+
+    char *payload = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    if (payload == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    // QoS 1 for stats (important summary data)
+    int msg_id = esp_mqtt_client_publish(s_mqtt_client, s_topic_ftm_stats,
+                                          payload, 0, 1, 0);
     free(payload);
 
     return (msg_id >= 0) ? ESP_OK : ESP_FAIL;

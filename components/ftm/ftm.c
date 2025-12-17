@@ -471,7 +471,7 @@ static void ftm_poll_task(void *pvParameters)
         log_ftm_stats(&stats);
 
 #ifdef CONFIG_FTS_MQTT_ENABLED
-        // Publish FTM report via MQTT
+        // Publish FTM report via MQTT (first entry with full timestamps)
         if (stats.count > 0 && fts_mqtt_is_connected()) {
             fts_mqtt_publish_ftm(
                 esp_timer_get_time(),
@@ -482,6 +482,14 @@ static void ftm_poll_task(void *pvParameters)
                 s_t2_ps[0],
                 s_t3_ps[0],
                 s_t4_ps[0]
+            );
+            // Publish session statistics (rtt/rssi min/max/avg)
+            fts_mqtt_publish_ftm_stats(
+                esp_timer_get_time(),
+                s_ftm_session_number,
+                stats.status, stats.count,
+                stats.rtt_avg_ps, stats.rtt_min_ps, stats.rtt_max_ps,
+                stats.rssi_avg, stats.rssi_min, stats.rssi_max
             );
         }
 #endif
