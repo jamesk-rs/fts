@@ -123,6 +123,44 @@ class SDRPublisher:
         result = self.mqtt.publish(self.topic, json.dumps(payload), qos=0)
         return result.rc == mqtt.MQTT_ERR_SUCCESS
 
+    def publish_stats(
+        self,
+        stats: dict,
+        overflow_count: int = 0,
+        topic: str = "fts/sdr/stats",
+    ) -> bool:
+        """
+        Publish rolling window statistics to MQTT.
+
+        Args:
+            stats: Dictionary with stats (from JitterStats.to_dict())
+            overflow_count: UHD buffer overflow count
+            topic: MQTT topic for stats (default: fts/sdr/stats)
+
+        Returns:
+            True if published successfully
+        """
+        if not self.connected:
+            logger.warning("Not connected to MQTT broker")
+            return False
+
+        payload = {
+            "ts": time.time(),
+            "count": stats.get('count', 0),
+            "mean_ns": stats.get('mean_ns', 0.0),
+            "std_ns": stats.get('std_ns', 0.0),
+            "min_ns": stats.get('min_ns', 0.0),
+            "max_ns": stats.get('max_ns', 0.0),
+            "p50_ns": stats.get('p50_ns', 0.0),
+            "p95_ns": stats.get('p95_ns', 0.0),
+            "p99_ns": stats.get('p99_ns', 0.0),
+            "p999_ns": stats.get('p999_ns', 0.0),
+            "overflow_count": overflow_count,
+        }
+
+        result = self.mqtt.publish(topic, json.dumps(payload), qos=1)
+        return result.rc == mqtt.MQTT_ERR_SUCCESS
+
     def publish_edge_batch(
         self,
         edges: list[tuple[int, int]],

@@ -273,6 +273,10 @@ def cmd_stream_mqtt(args):
         skip_samples=int(0.1 * args.sample_rate),
     )
 
+    # Rolling window: keep only last 60 seconds of edges (memory-bounded)
+    WINDOW_SECONDS = 60.0
+    window_samples = int(WINDOW_SECONDS * args.sample_rate)
+
     # Accumulators for edges (use falling edges - more reliable for AC-coupled)
     all_falling_a = []
     all_falling_b = []
@@ -281,10 +285,12 @@ def cmd_stream_mqtt(args):
     start_time = time.time()
     last_report_time = start_time
     edges_published = 0
+    stats_published = 0
     last_published_time = 0  # Track last published edge time to avoid duplicates
 
     def process_chunk(data):
-        nonlocal chunk_count, last_report_time, edges_published, last_published_time
+        nonlocal chunk_count, last_report_time, edges_published, stats_published, last_published_time
+        nonlocal all_falling_a, all_falling_b
 
         chan_a = data.real
         chan_b = data.imag
@@ -300,6 +306,17 @@ def cmd_stream_mqtt(args):
             all_falling_a.append(falling_a)
         if len(falling_b) > 0:
             all_falling_b.append(falling_b)
+
+        # Trim to rolling window (keep only last 60 seconds)
+        cutoff = detector_a.samples_processed - window_samples
+        if cutoff > 0 and all_falling_a:
+            times_a = np.concatenate(all_falling_a)
+            mask = times_a > cutoff
+            all_falling_a = [times_a[mask]] if mask.any() else []
+        if cutoff > 0 and all_falling_b:
+            times_b = np.concatenate(all_falling_b)
+            mask = times_b > cutoff
+            all_falling_b = [times_b[mask]] if mask.any() else []
 
         chunk_count += 1
 
@@ -326,9 +343,9 @@ def cmd_stream_mqtt(args):
                         edges_published += 1
                         last_published_time = t_a
 
-        # Report every second
+        # Report every 10 seconds (reduce CPU load to avoid UHD underflows)
         now = time.time()
-        if now - last_report_time >= 1.0:
+        if now - last_report_time >= 10.0:
             elapsed = now - start_time
             samples = detector_a.samples_processed
             n_falling_a = sum(len(x) for x in all_falling_a)
@@ -342,15 +359,18 @@ def cmd_stream_mqtt(args):
 
                 if len(delays) > 0:
                     stats = compute_stats(delays, args.pulse_freq)
+                    # Publish stats to MQTT
+                    if publisher.publish_stats(stats.to_dict(), capture._overflow_count):
+                        stats_published += 1
                     print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                          f"{len(delays)} edges, published={edges_published}, "
-                          f"mean={stats.mean_ns:+.1f}ns, std={stats.std_ns:.1f}ns")
+                          f"{len(delays)} edges (window), pub={edges_published}, stats={stats_published}, "
+                          f"mean={stats.mean_ns:+.1f}ns, std={stats.std_ns:.1f}ns, ovf={capture._overflow_count}")
                 else:
                     print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                          f"edges: A={n_falling_a}, B={n_falling_b}, published={edges_published}")
+                          f"edges: A={n_falling_a}, B={n_falling_b}, pub={edges_published}, ovf={capture._overflow_count}")
             else:
                 print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                      f"edges: A={n_falling_a}, B={n_falling_b}, published={edges_published}")
+                      f"edges: A={n_falling_a}, B={n_falling_b}, pub={edges_published}, ovf={capture._overflow_count}")
 
             last_report_time = now
 
@@ -374,21 +394,24 @@ def cmd_stream_mqtt(args):
     finally:
         publisher.close()
 
-    # Final stats
-    print("\n--- Final Statistics ---")
+    # Final stats (from rolling window - last 60 seconds)
+    print("\n--- Final Statistics (rolling window) ---")
     times_a = np.concatenate(all_falling_a) if all_falling_a else np.array([])
     times_b = np.concatenate(all_falling_b) if all_falling_b else np.array([])
+
+    print(f"Total samples: {detector_a.samples_processed:,}")
+    print(f"Total edges published: {edges_published}")
+    print(f"Total stats published: {stats_published}")
+    print(f"UHD overflows: {capture._overflow_count}")
 
     if len(times_a) > 0 and len(times_b) > 0:
         _, _, delays = match_edges(times_a, times_b, args.sample_rate)
         if len(delays) > 0:
             stats = compute_stats(delays, args.pulse_freq)
-            print(f"Total samples: {detector_a.samples_processed:,}")
-            print(f"Total edge pairs: {len(delays)}")
-            print(f"Total published: {edges_published}")
+            print(f"Window edge pairs: {len(delays)}")
             print(stats)
     else:
-        print("No edges detected.")
+        print("No edges in window.")
 
     return 0
 
