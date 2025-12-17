@@ -76,6 +76,7 @@ services:
 
   rl_engine:
     build: ./rl_engine
+    profiles: ["rl"]  # Disabled by default, use: docker compose --profile rl up
     depends_on:
       mosquitto:
         condition: service_healthy
