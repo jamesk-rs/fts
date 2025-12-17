@@ -35,6 +35,17 @@ services:
       timeout: 10s
       retries: 3
 
+  telegraf:
+    image: telegraf:1.29
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     ports:

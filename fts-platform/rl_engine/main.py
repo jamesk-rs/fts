@@ -170,27 +170,14 @@ class RLEngine:
         cutoff = device_ts - 1.0
         state.ftm_buffer = [f for f in state.ftm_buffer if f.get("ts", 0) > cutoff]
 
-        # Store in InfluxDB with current wall-clock time
-        point = (
-            Point("ftm")
-            .tag("device", device_id)
-            .field("rtt_ps", payload.get("rtt_ps", 0))
-            .field("rssi", payload.get("rssi", 0))
-            .field("t1", payload.get("t1", 0))
-            .field("t2", payload.get("t2", 0))
-            .field("t3", payload.get("t3", 0))
-            .field("t4", payload.get("t4", 0))
-            .field("device_ts", device_ts)
-            .time(int(now * 1e9))
-        )
-        self._write_influx(point)
+        # Note: InfluxDB write handled by Telegraf
 
         # Update Redis cache
         self.redis.hset(
             f"device:{device_id}",
             mapping={
                 "last_ftm": json.dumps(payload),
-                "last_ftm_ts": str(ts),
+                "last_ftm_ts": str(device_ts),
             },
         )
 
@@ -200,23 +187,12 @@ class RLEngine:
         """Process timing metrics from device."""
         state = self._get_or_create_state(device_id)
         now = time.time()
-        device_ts = payload.get("ts", now)
 
         # Update state
         state.last_metrics_ts = now
         state.period_ticks = payload.get("period_ticks", state.period_ticks)
 
-        # Store in InfluxDB with current wall-clock time
-        point = (
-            Point("metrics")
-            .tag("device", device_id)
-            .field("cycle_counter", payload.get("cycle_counter", 0))
-            .field("period_ticks", payload.get("period_ticks", 0))
-            .field("period_delta", payload.get("period_delta", 0))
-            .field("device_ts", device_ts)
-            .time(int(now * 1e9))
-        )
-        self._write_influx(point)
+        # Note: InfluxDB write handled by Telegraf
 
         logger.debug(f"Metrics from {device_id}: period={payload.get('period_ticks')}")
 
@@ -240,15 +216,7 @@ class RLEngine:
         cutoff = ts - self.edge_buffer_max_age_s
         self.edge_buffer = [e for e in self.edge_buffer if e.ts > cutoff]
 
-        # Store in InfluxDB
-        point = (
-            Point("edges")
-            .field("channel_a_ns", edge.channel_a_ns)
-            .field("channel_b_ns", edge.channel_b_ns)
-            .field("delay_ns", edge.delay_ns)
-            .time(int(ts * 1e9))
-        )
-        self._write_influx(point)
+        # Note: InfluxDB write handled by Telegraf
 
         # Try to correlate with recent FTM data from each device
         self._correlate_and_update(edge)
