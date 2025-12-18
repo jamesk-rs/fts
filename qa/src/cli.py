@@ -297,9 +297,15 @@ def cmd_stream_mqtt(args):
     # Accumulate delays in rolling window for stats (avoid re-matching)
     all_delays = []
 
+    # Per-channel edge counts in current reporting window (10s)
+    window_edges_a = 0
+    window_edges_b = 0
+    window_matched = 0
+
     def process_chunk(data):
         nonlocal chunk_count, last_report_time, edges_published, stats_published, last_published_time
         nonlocal all_falling_a, all_falling_b, all_delays
+        nonlocal window_edges_a, window_edges_b, window_matched
         # nonlocal time_detect, time_match, time_publish, time_stats
 
         chan_a = data.real
@@ -314,6 +320,11 @@ def cmd_stream_mqtt(args):
         # Accumulate falling edges (type == 1)
         falling_a = edges_a[edges_a[:, 1] == 1, 0] if len(edges_a) > 0 else np.array([])
         falling_b = edges_b[edges_b[:, 1] == 1, 0] if len(edges_b) > 0 else np.array([])
+
+        # Track per-channel edge counts
+        window_edges_a += len(falling_a)
+        window_edges_b += len(falling_b)
+
         if len(falling_a) > 0:
             all_falling_a.append(falling_a)
         if len(falling_b) > 0:
@@ -329,18 +340,19 @@ def cmd_stream_mqtt(args):
 
             if len(recent_a) > 0 and len(recent_b) > 0:
                 # t0 = time.perf_counter()
-                matched_a, matched_b, delays = match_edges(
+                result = match_edges(
                     recent_a, recent_b, args.sample_rate, pulse_freq=args.pulse_freq
                 )
                 # time_match += time.perf_counter() - t0
 
                 # Save delays for stats (avoid re-matching later)
-                if len(delays) > 0:
-                    all_delays.append(delays)
+                if len(result.delays) > 0:
+                    all_delays.append(result.delays)
 
                 # Publish only new matches to MQTT (avoid duplicates)
                 # t0 = time.perf_counter()
-                for t_a, t_b, delay_ns in zip(matched_a, matched_b, delays):
+                new_matched = 0
+                for t_a, t_b, delay_ns in zip(result.matched_a, result.matched_b, result.delays):
                     # Skip already published edges
                     if t_a <= last_published_time:
                         continue
@@ -349,7 +361,9 @@ def cmd_stream_mqtt(args):
                     ch_b_ns = int(t_b / args.sample_rate * 1e9)
                     if publisher.publish_edge(ch_a_ns, ch_b_ns):
                         edges_published += 1
+                        new_matched += 1
                         last_published_time = t_a
+                window_matched += new_matched
                 # time_publish += time.perf_counter() - t0
 
         # Report every 10 seconds (reduce CPU load to avoid UHD underflows)
@@ -366,21 +380,34 @@ def cmd_stream_mqtt(args):
                 combined_delays = combined_delays[-max_delays:]
                 all_delays = [combined_delays]
 
+            # Compute per-channel stats for this window
+            channel_stats = {
+                'channel_a_edges': window_edges_a,
+                'channel_b_edges': window_edges_b,
+                'matched_count': window_matched,
+            }
+
             # Compute jitter stats from accumulated delays (no re-matching!)
             if len(combined_delays) > 10:
                 stats = compute_stats(combined_delays, args.pulse_freq)
-                # Publish stats to MQTT
-                if publisher.publish_stats(stats.to_dict(), capture._overflow_count):
+                # Publish stats to MQTT with per-channel info
+                if publisher.publish_stats(stats.to_dict(), capture._overflow_count, channel_stats):
                     stats_published += 1
                 # time_stats += time.perf_counter() - t0
                 print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                      f"{len(combined_delays)} delays (window), pub={edges_published}, stats={stats_published}, "
+                      f"A={window_edges_a} B={window_edges_b} matched={len(combined_delays)}, "
                       f"mean={stats.mean_ns:+.1f}ns, std={stats.std_ns:.1f}ns, ovf={capture._overflow_count}")
                 # print(f"         timing: detect={time_detect:.2f}s, match={time_match:.2f}s, publish={time_publish:.2f}s, stats={time_stats:.2f}s")
             else:
+                # Publish stats even without delays to show channel health
+                publisher.publish_stats({}, capture._overflow_count, channel_stats)
                 print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                      f"delays={len(combined_delays)}, pub={edges_published}, ovf={capture._overflow_count}")
+                      f"A={window_edges_a} B={window_edges_b} delays={len(combined_delays)}, ovf={capture._overflow_count}")
 
+            # Reset window counters
+            window_edges_a = 0
+            window_edges_b = 0
+            window_matched = 0
             last_report_time = now
 
         return True  # Continue streaming

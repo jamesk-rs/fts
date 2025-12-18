@@ -127,6 +127,7 @@ class SDRPublisher:
         self,
         stats: dict,
         overflow_count: int = 0,
+        channel_stats: dict = None,
         topic: str = "fts/sdr/stats",
     ) -> bool:
         """
@@ -135,6 +136,7 @@ class SDRPublisher:
         Args:
             stats: Dictionary with stats (from JitterStats.to_dict())
             overflow_count: UHD buffer overflow count
+            channel_stats: Per-channel edge statistics (channel_a_edges, channel_b_edges)
             topic: MQTT topic for stats (default: fts/sdr/stats)
 
         Returns:
@@ -157,6 +159,12 @@ class SDRPublisher:
             "p999_ns": stats.get('p999_ns', 0.0),
             "overflow_count": overflow_count,
         }
+
+        # Add per-channel stats if provided
+        if channel_stats:
+            payload["channel_a_edges"] = channel_stats.get('channel_a_edges', 0)
+            payload["channel_b_edges"] = channel_stats.get('channel_b_edges', 0)
+            payload["matched_count"] = channel_stats.get('matched_count', 0)
 
         result = self.mqtt.publish(topic, json.dumps(payload), qos=1)
         return result.rc == mqtt.MQTT_ERR_SUCCESS

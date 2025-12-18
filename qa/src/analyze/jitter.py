@@ -45,13 +45,34 @@ def compute_phase_error(
     return delays * pulse_freq * 360.0
 
 
+class MatchResult:
+    """Result of edge matching between two channels."""
+
+    def __init__(
+        self,
+        matched_a: np.ndarray,
+        matched_b: np.ndarray,
+        delays: np.ndarray,
+        total_a: int,
+        total_b: int,
+    ):
+        self.matched_a = matched_a
+        self.matched_b = matched_b
+        self.delays = delays
+        self.total_a = total_a
+        self.total_b = total_b
+        self.matched_count = len(matched_a)
+        self.unmatched_a = total_a - self.matched_count
+        self.unmatched_b = total_b - self.matched_count
+
+
 def match_edges(
     times_a: np.ndarray,
     times_b: np.ndarray,
     sample_rate: float,
     pulse_freq: float = 2000.0,
     max_delay_seconds: float = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> MatchResult:
     """
     Match edges between channels based on timing proximity.
 
@@ -68,10 +89,7 @@ def match_edges(
                           If None, uses 10% of pulse period.
 
     Returns:
-        Tuple of (matched_a, matched_b, delays) where:
-        - matched_a: Matched edge times from channel A
-        - matched_b: Matched edge times from channel B
-        - delays: Time delays in seconds
+        MatchResult with matched edges, delays, and per-channel statistics
     """
     # Use 10% of period as max delay (same as StreamingMatcher)
     if max_delay_seconds is None:
@@ -111,4 +129,10 @@ def match_edges(
     matched_b = np.array(matched_b)
     delays = (matched_b - matched_a) / sample_rate
 
-    return matched_a, matched_b, delays
+    return MatchResult(
+        matched_a=matched_a,
+        matched_b=matched_b,
+        delays=delays,
+        total_a=len(times_a),
+        total_b=len(times_b),
+    )
