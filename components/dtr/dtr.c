@@ -440,7 +440,7 @@ void dtr_set_align_request_inst(dtr_instance_t *inst,
     inst->align_feedback.ready = false;
     portEXIT_CRITICAL(&inst->spinlock);
 
-    ESP_LOGI(TAG, "Alignment request: cycle=%lld, ticks=%lld, base_period=%lld FP16 %ld",
+    ESP_LOGI(TAG, "// Alignment request: cycle=%lld, ticks=%lld, base_period=%lld FP16 %ld",
              (long long)aligned_cycle_counter,
              (long long)aligned_local_ticks,
              (long long)aligned_base_period_fp16 / FP16_SCALE,
