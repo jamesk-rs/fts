@@ -1,6 +1,17 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "name": "Experiments",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> keep(columns: [\"_time\", \"_value\", \"experiment\", \"type\"])",
+        "textColumn": "_value",
+        "tagsColumn": "experiment,type"
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,

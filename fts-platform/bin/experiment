@@ -1,0 +1,129 @@
+#!/bin/bash
+# FTS Experiment Tracking
+# Usage: experiment {start|event|stop|status|list} [args...]
+
+set -e
+
+INFLUX_URL="${INFLUX_URL:-http://localhost:8086}"
+INFLUX_TOKEN="${INFLUX_TOKEN:-fts-token-change-me}"
+INFLUX_ORG="${INFLUX_ORG:-fts}"
+INFLUX_BUCKET="${INFLUX_BUCKET:-fts}"
+STATE_FILE="/tmp/fts-experiment-current"
+
+write_event() {
+    local experiment="$1"
+    local event_type="$2"
+    local description="$3"
+    local timestamp_ns=$(date +%s%N)
+
+    # Escape special characters in description for line protocol
+    description=$(echo "$description" | sed 's/"/\\"/g')
+
+    # Write to InfluxDB using line protocol
+    curl -s -X POST "${INFLUX_URL}/api/v2/write?org=${INFLUX_ORG}&bucket=${INFLUX_BUCKET}&precision=ns" \
+        -H "Authorization: Token ${INFLUX_TOKEN}" \
+        -H "Content-Type: text/plain" \
+        -d "experiments,experiment=${experiment},type=${event_type} description=\"${description}\" ${timestamp_ns}" \
+        > /dev/null
+}
+
+cmd="${1:-}"
+shift 2>/dev/null || true
+
+case "$cmd" in
+    start)
+        if [ -z "$1" ]; then
+            echo "Usage: experiment start <name> [description]"
+            exit 1
+        fi
+        experiment_name="$1"
+        description="${2:-Experiment started}"
+
+        if [ -f "$STATE_FILE" ]; then
+            current=$(cat "$STATE_FILE")
+            echo "Warning: Experiment '$current' is already running. Stopping it first."
+            write_event "$current" "stop" "Auto-stopped (new experiment started)"
+        fi
+
+        echo "$experiment_name" > "$STATE_FILE"
+        write_event "$experiment_name" "start" "$description"
+        echo "Started experiment: $experiment_name"
+        ;;
+
+    event|e)
+        if [ -z "$1" ]; then
+            echo "Usage: experiment event <description>"
+            exit 1
+        fi
+        description="$1"
+
+        if [ -f "$STATE_FILE" ]; then
+            experiment_name=$(cat "$STATE_FILE")
+        else
+            experiment_name="unnamed"
+            echo "Note: No active experiment, logging as 'unnamed'"
+        fi
+
+        write_event "$experiment_name" "event" "$description"
+        echo "Event logged: $description"
+        ;;
+
+    stop)
+        if [ ! -f "$STATE_FILE" ]; then
+            echo "No active experiment to stop"
+            exit 1
+        fi
+
+        experiment_name=$(cat "$STATE_FILE")
+        description="${1:-Experiment ended}"
+
+        write_event "$experiment_name" "stop" "$description"
+        rm -f "$STATE_FILE"
+        echo "Stopped experiment: $experiment_name"
+        ;;
+
+    status|s)
+        if [ -f "$STATE_FILE" ]; then
+            experiment_name=$(cat "$STATE_FILE")
+            echo "Active experiment: $experiment_name"
+        else
+            echo "No active experiment"
+        fi
+        ;;
+
+    list|ls)
+        echo "Experiments:"
+        curl -s -X POST "${INFLUX_URL}/api/v2/query?org=${INFLUX_ORG}" \
+            -H "Authorization: Token ${INFLUX_TOKEN}" \
+            -H "Content-Type: application/vnd.flux" \
+            -d 'from(bucket: "fts")
+  |> range(start: 0)
+  |> filter(fn: (r) => r._measurement == "experiments")
+  |> filter(fn: (r) => r.type == "start")
+  |> keep(columns: ["_time", "experiment", "_value"])
+  |> sort(columns: ["_time"], desc: true)' \
+            | grep -oP '(?<=,)[^,]+(?=,start,)' 2>/dev/null | sort -u || echo "(none found)"
+        ;;
+
+    *)
+        echo "FTS Experiment Tracking"
+        echo ""
+        echo "Usage: $(basename "$0") <command> [args...]"
+        echo ""
+        echo "Commands:"
+        echo "  start <name> [desc]  - Start a new experiment"
+        echo "  event <description>  - Log an event in current experiment"
+        echo "  stop [description]   - Stop current experiment"
+        echo "  status               - Show current experiment"
+        echo "  list                 - List all experiments"
+        echo ""
+        echo "Shortcuts: e=event, s=status, ls=list"
+        echo ""
+        echo "Examples:"
+        echo "  $(basename "$0") start distance-test-001 'Testing range limits'"
+        echo "  $(basename "$0") event 'all devices on desktop'"
+        echo "  $(basename "$0") e 'master moved 10m away'"
+        echo "  $(basename "$0") stop"
+        exit 1
+        ;;
+esac
