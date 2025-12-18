@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""
+FTS Device Control via MQTT
+
+Send control commands to FTS devices over MQTT.
+
+Usage:
+    bin/control trigger-wifi-disconnect <device_id>
+    bin/control trigger-wifi-disconnect slave1
+    bin/control --broker 192.168.1.100 trigger-wifi-disconnect master
+"""
+
+import argparse
+import json
+import sys
+
+try:
+    import paho.mqtt.client as mqtt
+except ImportError:
+    print("Error: paho-mqtt not installed. Run: pip install paho-mqtt", file=sys.stderr)
+    sys.exit(1)
+
+DEFAULT_BROKER = "localhost"
+DEFAULT_PORT = 1883
+
+
+def trigger_wifi_disconnect(broker: str, port: int, device_id: str) -> bool:
+    """Send wifi_disconnect command to device."""
+    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+
+    try:
+        client.connect(broker, port, 60)
+    except Exception as e:
+        print(f"Error: Failed to connect to MQTT broker {broker}:{port}: {e}", file=sys.stderr)
+        return False
+
+    client.loop_start()  # Start network thread
+
+    topic = f"fts/{device_id}/control"
+    payload = json.dumps({"wifi_disconnect": True})
+
+    result = client.publish(topic, payload, qos=1)
+    result.wait_for_publish(timeout=5.0)  # 5 second timeout
+
+    print(f"Sent wifi_disconnect to {topic}")
+    client.loop_stop()
+    client.disconnect()
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="FTS Device Control via MQTT",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    %(prog)s trigger-wifi-disconnect slave1
+    %(prog)s trigger-wifi-disconnect master
+    %(prog)s --broker 192.168.1.100 trigger-wifi-disconnect slave2
+"""
+    )
+    parser.add_argument(
+        "--broker", "-b",
+        default=DEFAULT_BROKER,
+        help=f"MQTT broker host (default: {DEFAULT_BROKER})"
+    )
+    parser.add_argument(
+        "--port", "-p",
+        type=int,
+        default=DEFAULT_PORT,
+        help=f"MQTT broker port (default: {DEFAULT_PORT})"
+    )
+
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # trigger-wifi-disconnect command
+    disconnect_parser = subparsers.add_parser(
+        "trigger-wifi-disconnect",
+        help="Trigger WiFi disconnect on device (for testing reconnection)"
+    )
+    disconnect_parser.add_argument(
+        "device_id",
+        help="Device ID (e.g., slave1, slave2, master)"
+    )
+
+    args = parser.parse_args()
+
+    if args.command == "trigger-wifi-disconnect":
+        success = trigger_wifi_disconnect(args.broker, args.port, args.device_id)
+        sys.exit(0 if success else 1)
+
+
+if __name__ == "__main__":
+    main()

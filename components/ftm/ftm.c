@@ -259,9 +259,10 @@ static void ftm_sync_listener_task(void *arg)
             continue;
         }
 
-        // First sync: capture master info from packet
+        // Check if we're already synced to a master
         EventBits_t bits = xEventGroupGetBits(s_ftm_event_group);
         if (!(bits & FTM_MASTER_SYNC_BIT)) {
+            // First sync: capture master info from packet
             memcpy(s_master_mac, pkt.mac, 6);
             uint8_t master_channel = pkt.channel;
 
@@ -287,13 +288,23 @@ static void ftm_sync_listener_task(void *arg)
                 continue;
             }
 
+            // Set the flag
             xEventGroupSetBits(s_ftm_event_group, FTM_MASTER_SYNC_BIT);
             ESP_LOGI(TAG, "Master sync: MAC=%02x:%02x:%02x:%02x:%02x:%02x, channel=%d",
                      s_master_mac[0], s_master_mac[1], s_master_mac[2],
                      s_master_mac[3], s_master_mac[4], s_master_mac[5],
                      s_ap_channel);
+        } else {
+            // Already synced - ignore packets from other masters
+            if (memcmp(pkt.mac, s_master_mac, 6) != 0) {
+                ESP_LOGW(TAG, "Ignoring sync from unknown master MAC=%02x:%02x:%02x:%02x:%02x:%02x",
+                         pkt.mac[0], pkt.mac[1], pkt.mac[2],
+                         pkt.mac[3], pkt.mac[4], pkt.mac[5]);
+                continue;
+            }
         }
 
+        // FIXME TODO: actually do something with the sync info
         // Detect reboot: run_id changed
         if (s_sync_valid && pkt.run_id != s_remote_run_id) {
             ESP_LOGW(TAG, "Master reboot detected (run_id: 0x%08lx -> 0x%08lx)",
@@ -344,7 +355,7 @@ static esp_err_t ftm_sync_slave_init(void)
 /**
  * FTM event handler
  */
-static void ftm_event_handler(void *arg, esp_event_base_t event_base,
+static void slave_ftm_event_handler(void *arg, esp_event_base_t event_base,
                               int32_t event_id, void *event_data)
 {
     if (event_id == WIFI_EVENT_FTM_REPORT) {
@@ -461,15 +472,15 @@ static void log_ftm_stats(const ftm_stats_t *stats)
 /**
  * FTM poll task - runs FTM sessions periodically
  */
-static void ftm_poll_task(void *pvParameters)
+static void slave_ftm_poll_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "FTM poll task started, waiting for master MAC...");
 
-    // Wait for master MAC from ESP-NOW (no timeout - wait forever)
+    // Wait for master sync
     xEventGroupWaitBits(s_ftm_event_group, FTM_MASTER_SYNC_BIT,
                         pdFALSE, pdTRUE, portMAX_DELAY);
 
-    ESP_LOGI(TAG, "Master MAC acquired, starting FTM sessions");
+    ESP_LOGI(TAG, "Master synced, starting FTM sessions");
 
     // Prepare FTM configuration
     wifi_ftm_initiator_cfg_t ftm_cfg = {
@@ -562,7 +573,7 @@ static void ftm_poll_task(void *pvParameters)
 /**
  * IP event handler - sets GOT_IP bit when IP is obtained
  */
-static void ip_event_handler(void *arg, esp_event_base_t event_base,
+static void slave_ip_event_handler(void *arg, esp_event_base_t event_base,
                              int32_t event_id, void *event_data)
 {
     if (event_id == IP_EVENT_STA_GOT_IP) {
@@ -575,18 +586,28 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
 /**
  * WiFi event handler (slave)
  */
-static void wifi_event_handler(void *arg, esp_event_base_t event_base,
+static void slave_sta_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     if (event_id == WIFI_EVENT_STA_CONNECTED) {
         wifi_event_sta_connected_t *event = (wifi_event_sta_connected_t *)event_data;
         ESP_LOGI(TAG, "Connected to AP: SSID=%s, Channel=%d", event->ssid, event->channel);
+
+        // Check for channel mismatch if master was already discovered
+        EventBits_t bits = xEventGroupGetBits(s_ftm_event_group);
+        if ((bits & FTM_MASTER_SYNC_BIT) && s_ap_channel != 0 && event->channel != s_ap_channel) {
+            ESP_LOGW(TAG, "Channel mismatch: connected=%d, expected=%d. Reconnecting...",
+                     event->channel, s_ap_channel);
+            esp_wifi_disconnect();  // Disconnect handler will set channel hint and reconnect
+            return;
+        }
+
         s_ap_channel = event->channel;
 
         // Start FTM poll task (it will wait for master MAC internally)
         if (s_ftm_task_handle == NULL) {
             xEventGroupClearBits(s_ftm_event_group, FTM_REPORT_BIT | FTM_FAILURE_BIT);
-            BaseType_t ret = xTaskCreate(ftm_poll_task, "ftm_poll", FTM_POLL_TASK_STACK_SIZE, NULL, FTM_POLL_TASK_PRIORITY, &s_ftm_task_handle);
+            BaseType_t ret = xTaskCreate(slave_ftm_poll_task, "ftm_poll", FTM_POLL_TASK_STACK_SIZE, NULL, FTM_POLL_TASK_PRIORITY, &s_ftm_task_handle);
             if (ret != pdPASS) {
                 ESP_LOGE(TAG, "Failed to create FTM poll task");
             }
@@ -598,6 +619,15 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             esp_wifi_ftm_end_session();
             vTaskDelete(s_ftm_task_handle);
             s_ftm_task_handle = NULL;
+        }
+
+        // Set channel hint if master was already discovered
+        EventBits_t bits = xEventGroupGetBits(s_ftm_event_group);
+        if ((bits & FTM_MASTER_SYNC_BIT) && s_ap_channel != 0) {
+            wifi_config_t wifi_config;
+            esp_wifi_get_config(WIFI_IF_STA, &wifi_config);
+            wifi_config.sta.channel = s_ap_channel;
+            esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
         }
 
         esp_wifi_connect();
@@ -660,9 +690,31 @@ static void master_sta_event_handler(void *arg, esp_event_base_t event_base,
             wifi_event_sta_connected_t *event = (wifi_event_sta_connected_t *)event_data;
             ESP_LOGI(TAG, "Master connected to AP: SSID=%s, Channel=%d",
                      event->ssid, event->channel);
+
+            // Check for channel mismatch if channel already locked (s_ap_channel != 0)
+            if (s_ap_channel != 0 && event->channel != s_ap_channel) {
+                ESP_LOGW(TAG, "Channel mismatch: connected=%d, expected=%d. Reconnecting...",
+                         event->channel, s_ap_channel);
+                esp_wifi_disconnect();  // Disconnect handler will set channel hint and reconnect
+                return;
+            }
+
+            // Lock channel on first successful connect (s_ap_channel was 0)
+            if (s_ap_channel == 0) {
+                ESP_LOGI(TAG, "Master channel locked to %d", event->channel);
+            }
             s_ap_channel = event->channel;
         } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
             ESP_LOGW(TAG, "Master disconnected from AP, reconnecting...");
+
+            // Set channel hint if channel was locked
+            if (s_ap_channel != 0) {
+                wifi_config_t wifi_config;
+                esp_wifi_get_config(WIFI_IF_STA, &wifi_config);
+                wifi_config.sta.channel = s_ap_channel;
+                esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+            }
+
             esp_wifi_connect();
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
@@ -674,7 +726,7 @@ static void master_sta_event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-esp_err_t ftm_master_init_sta(const char *ssid, const char *password)
+esp_err_t ftm_master_sta_init(const char *ssid, const char *password)
 {
     ESP_LOGI(TAG, "Initializing FTM master (STA mode)...");
 
@@ -709,6 +761,7 @@ esp_err_t ftm_master_init_sta(const char *ssid, const char *password)
     ESP_ERROR_CHECK(esp_wifi_connect());
 
     // Wait for IP
+    // FIXME: align slave implemenation and wait indefinitely
     EventBits_t bits = xEventGroupWaitBits(s_ftm_event_group, FTM_GOT_IP_BIT,
                                             pdFALSE, pdTRUE, pdMS_TO_TICKS(30000));
     if (!(bits & FTM_GOT_IP_BIT)) {
@@ -716,14 +769,14 @@ esp_err_t ftm_master_init_sta(const char *ssid, const char *password)
         return ESP_FAIL;
     }
 
-    // Initialize clock and ESP-NOW
+    // Initialize clock and UDP sync
     ESP_ERROR_CHECK(clock_init());
     ESP_ERROR_CHECK(ftm_sync_master_init(0, WIFI_IF_STA));
 
     return ESP_OK;
 }
 
-esp_err_t ftm_master_init(const char *ssid, const char *password, uint8_t channel)
+esp_err_t ftm_master_ap_init(const char *ssid, const char *password, uint8_t channel)
 {
     ESP_LOGI(TAG, "Initializing FTM master (AP mode)...");
 
@@ -775,9 +828,9 @@ esp_err_t ftm_slave_init(const char *ssid, const char *password)
     ESP_ERROR_CHECK(ftm_wifi_init_common(WIFI_MODE_STA));
 
     // Register event handlers
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_FTM_REPORT, &ftm_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &ip_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &slave_sta_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_FTM_REPORT, &slave_ftm_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &slave_ip_event_handler, NULL));
 
     // Configure STA
     wifi_config_t wifi_config = {.sta = {.ssid = "", .password = ""}};
@@ -837,4 +890,11 @@ esp_err_t ftm_wait_for_ip(uint32_t timeout_ms)
         return ESP_OK;
     }
     return ESP_ERR_TIMEOUT;
+}
+
+esp_err_t ftm_trigger_wifi_disconnect(void)
+{
+    ESP_LOGW(TAG, "WiFi disconnect triggered via control command");
+    vTaskDelay(pdMS_TO_TICKS(100));  // Let MQTT finish processing
+    return esp_wifi_disconnect();
 }

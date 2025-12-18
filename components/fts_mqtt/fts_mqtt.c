@@ -6,6 +6,7 @@
  */
 
 #include "fts_mqtt.h"
+#include "ftm.h"
 #include "mqtt_client.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -68,6 +69,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                 // Parse JSON payload
                 cJSON *json = cJSON_ParseWithLength(event->data, event->data_len);
                 if (json) {
+                    // Handle wifi_disconnect command
+                    cJSON *wifi_disconnect = cJSON_GetObjectItem(json, "wifi_disconnect");
+                    if (wifi_disconnect && cJSON_IsTrue(wifi_disconnect)) {
+                        ESP_LOGW(TAG, "Control: WiFi disconnect requested");
+                        ftm_trigger_wifi_disconnect();
+                    }
+
+                    // Handle period correction
                     cJSON *correction = cJSON_GetObjectItem(json, "period_correction_fp16");
                     cJSON *phase_error = cJSON_GetObjectItem(json, "phase_error_ns");
                     cJSON *gain = cJSON_GetObjectItem(json, "gain_K");

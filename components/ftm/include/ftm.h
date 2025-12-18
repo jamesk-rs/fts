@@ -54,7 +54,7 @@ typedef void (*ftm_callback_t)(const ftm_report_t *report);
  * @param channel AP channel
  * @return ESP_OK on success
  */
-esp_err_t ftm_master_init(const char *ssid, const char *password, uint8_t channel);
+esp_err_t ftm_master_ap_init(const char *ssid, const char *password, uint8_t channel);
 
 /**
  * Initialize FTM master in STA mode (connects to external WiFi)
@@ -67,7 +67,7 @@ esp_err_t ftm_master_init(const char *ssid, const char *password, uint8_t channe
  * @param password WiFi password
  * @return ESP_OK on success
  */
-esp_err_t ftm_master_init_sta(const char *ssid, const char *password);
+esp_err_t ftm_master_sta_init(const char *ssid, const char *password);
 
 /**
  * Initialize FTM slave (connect to AP and run FTM sessions)
@@ -97,6 +97,16 @@ esp_err_t ftm_deinit(void);
  * @return ESP_OK if IP obtained, ESP_ERR_TIMEOUT if timeout
  */
 esp_err_t ftm_wait_for_ip(uint32_t timeout_ms);
+
+/**
+ * Trigger WiFi disconnect (for testing/simulation via MQTT control)
+ *
+ * Sticky channel/master configuration is preserved - device will reconnect
+ * to the same channel and (for slaves) the same master.
+ *
+ * @return ESP_OK on success
+ */
+esp_err_t ftm_trigger_wifi_disconnect(void);
 
 #ifdef __cplusplus
 }

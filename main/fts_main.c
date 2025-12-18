@@ -138,10 +138,10 @@ void app_main(void)
     // ========== MASTER MODE ==========
 #ifdef CONFIG_FTS_MASTER_AP_MODE
     // AP mode: Master creates its own network
-    ESP_ERROR_CHECK(ftm_master_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD, CONFIG_FTS_AP_CHANNEL));
+    ESP_ERROR_CHECK(ftm_master_ap_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD, CONFIG_FTS_AP_CHANNEL));
 #else
     // STA mode (default): Master connects to external WiFi like slaves
-    ESP_ERROR_CHECK(ftm_master_init_sta(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD));
+    ESP_ERROR_CHECK(ftm_master_sta_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD));
 #endif
 
     // Initialize DTR (MCPWM timer hardware)
