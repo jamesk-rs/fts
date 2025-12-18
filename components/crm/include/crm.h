@@ -39,6 +39,14 @@ typedef void (*crm_update_callback_t)(void);
 esp_err_t crm_init(void);
 
 /**
+ * Reset CRM state (clears regression buffer, keeps callback)
+ * Call when master reboots to clear stale samples
+ *
+ * @return ESP_OK on success
+ */
+esp_err_t crm_reset(void);
+
+/**
  * Register callback for CRM updates
  *
  * @param callback Function to call when regression model is updated

@@ -136,6 +136,9 @@ bool IRAM_ATTR dtr_core_period_handler(dtr_instance_t *inst)
     portEXIT_CRITICAL_ISR(&inst->spinlock);
 
     // Update period via backend (outside critical section for backends that need it)
+    // FIXME TODO: Instead of abort(), skip the bad alignment and recover gracefully.
+    // If period_ticks is invalid, restore DTR_TIMER_PERIOD_TICKS and cancel alignment.
+    // This provides defense-in-depth against bad CRM models producing invalid periods.
     if (inst->period_ticks <= 0 || inst->period_ticks > 65535) {
         ets_printf("FATAL: period_ticks=%lld out of range [1,65535]\n", (long long)inst->period_ticks);
         abort();

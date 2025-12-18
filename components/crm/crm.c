@@ -35,7 +35,7 @@ int64_t crm_remote_ref_ps = 0;
 static struct {
     int64_t local_ps[MAX_REGRESSION_SAMPLES];
     int64_t remote_ps[MAX_REGRESSION_SAMPLES];
-    uint32_t count;
+    uint32_t count; // FIXME this is too much - can be uint16_t
     uint32_t head;  // Circular buffer head
 } s_regression_samples = {0};
 
@@ -72,7 +72,8 @@ static void add_regression_sample(int64_t local_ps, int64_t remote_ps)
 static bool perform_regression(void)
 {
     if (s_regression_samples.count < MIN_REGRESSION_SAMPLES) {
-        ESP_LOGW(TAG, "Insufficient samples for regression: %lu", (unsigned long)s_regression_samples.count);
+        ESP_LOGW(TAG, "Insufficient samples for regression: %lu (need %lu)",
+            (unsigned long)s_regression_samples.count, (unsigned long)MIN_REGRESSION_SAMPLES);
         return false;
     }
 
@@ -131,6 +132,10 @@ static bool perform_regression(void)
     float residual_std = (float)(sqrt(ss_res / n) / 1e3);  // In nanoseconds
     crm_local_ref_ps = t_ref_local_ps;
     crm_remote_ref_ps = t_ref_remote_ps;
+
+    // FIXME TODO: Add slope magnitude validation. Real oscillators have <=50 ppm drift,
+    // so |crm_slope_lr_m1| > 0.001 (1000 ppm) indicates invalid model (e.g., epoch mismatch).
+    // This would catch bad regressions before they cause negative period_ticks in DTR.
     crm_valid = (r_squared > CRM_R_SQUARED_THRESHOLD);
 
     // Update internal state for logging
@@ -141,15 +146,23 @@ static bool perform_regression(void)
     return true;
 }
 
-esp_err_t crm_init(void)
+esp_err_t crm_reset(void)
 {
-    // Reset all state
+    // Clear regression buffer but keep callback registered
     memset(&s_regression_samples, 0, sizeof(s_regression_samples));
     crm_valid = false;
-    crm_slope_lr_m1 = 0.0;  // No frequency offset initially (slope = 1.0)
+    crm_slope_lr_m1 = 0.0;
     crm_slope_rl_m1 = 0.0;
     crm_local_ref_ps = 0;
     crm_remote_ref_ps = 0;
+
+    ESP_LOGW(TAG, "CRM state reset");
+    return ESP_OK;
+}
+
+esp_err_t crm_init(void)
+{
+    crm_reset();
     s_callback = NULL;
 
     ESP_LOGI(TAG, "CRM module initialized");
