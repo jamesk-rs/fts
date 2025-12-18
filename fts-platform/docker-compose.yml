@@ -39,6 +39,14 @@ services:
     image: telegraf:1.29
     volumes:
       - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    environment:
+      - HOST_PROC=/host/proc
+      - HOST_SYS=/host/sys
+    group_add:
+      - "${DOCKER_GID:-124}"  # GID of docker group on host (run: stat -c '%g' /var/run/docker.sock)
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -48,6 +56,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    profiles: ["rl"]  # Only needed for RL engine
     ports:
       - "6379:6379"
     volumes:
