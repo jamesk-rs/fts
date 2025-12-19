@@ -243,8 +243,9 @@ def cmd_stream_mqtt(args):
     from sdr_publisher import SDRPublisher
     import time
 
+    duration_str = f"{args.duration}s" if args.duration else "indefinite (Ctrl+C to stop)"
     print(f"Streaming capture with MQTT publishing...")
-    print(f"  Duration: {args.duration}s")
+    print(f"  Duration: {duration_str}")
     print(f"  Sample rate: {args.sample_rate/1e6:.1f} MSps")
     print(f"  Pulse freq: {args.pulse_freq} Hz")
     print(f"  Threshold: {args.threshold}")
@@ -1709,8 +1710,8 @@ def main():
     # stream-mqtt command
     p_stream_mqtt = subparsers.add_parser('stream-mqtt',
         help='Continuous capture with MQTT publishing to RL engine')
-    p_stream_mqtt.add_argument('-d', '--duration', type=float, default=60,
-                               help='Duration in seconds (default: 60)')
+    p_stream_mqtt.add_argument('-d', '--duration', type=float, default=None,
+                               help='Duration in seconds (default: indefinite)')
     p_stream_mqtt.add_argument('-r', '--sample-rate', type=float, default=10e6,
                                help='Sample rate in Hz (default: 10e6)')
     p_stream_mqtt.add_argument('-f', '--freq', type=float, default=0,
