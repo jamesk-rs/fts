@@ -354,17 +354,32 @@ def cmd_stream_mqtt(args):
                 # Publish only new matches to MQTT (avoid duplicates)
                 # t0 = time.perf_counter()
                 new_matched = 0
-                for t_a, t_b, delay_ns in zip(result.matched_a, result.matched_b, result.delays):
+                for t_a, t_b in zip(result.matched_a, result.matched_b):
                     # Skip already published edges
                     if t_a <= last_published_time:
                         continue
                     # Convert sample times to nanoseconds
                     ch_a_ns = int(t_a / args.sample_rate * 1e9)
                     ch_b_ns = int(t_b / args.sample_rate * 1e9)
-                    if publisher.publish_edge(ch_a_ns, ch_b_ns):
+                    if publisher.publish_edge(channel_a_ns=ch_a_ns, channel_b_ns=ch_b_ns):
                         edges_published += 1
                         new_matched += 1
                         last_published_time = t_a
+
+                # Publish unmatched A edges (only channel_a_ns)
+                for t_a in result.unmatched_a_times:
+                    if t_a <= last_published_time:
+                        continue
+                    ch_a_ns = int(t_a / args.sample_rate * 1e9)
+                    if publisher.publish_edge(channel_a_ns=ch_a_ns):
+                        edges_published += 1
+
+                # Publish unmatched B edges (only channel_b_ns)
+                for t_b in result.unmatched_b_times:
+                    ch_b_ns = int(t_b / args.sample_rate * 1e9)
+                    if publisher.publish_edge(channel_b_ns=ch_b_ns):
+                        edges_published += 1
+
                 window_matched += new_matched
                 # time_publish += time.perf_counter() - t0
 

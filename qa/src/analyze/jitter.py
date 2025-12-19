@@ -55,6 +55,8 @@ class MatchResult:
         delays: np.ndarray,
         total_a: int,
         total_b: int,
+        unmatched_a_times: np.ndarray = None,
+        unmatched_b_times: np.ndarray = None,
     ):
         self.matched_a = matched_a
         self.matched_b = matched_b
@@ -62,8 +64,12 @@ class MatchResult:
         self.total_a = total_a
         self.total_b = total_b
         self.matched_count = len(matched_a)
-        self.unmatched_a = total_a - self.matched_count
-        self.unmatched_b = total_b - self.matched_count
+        # Arrays of unmatched edge times
+        self.unmatched_a_times = unmatched_a_times if unmatched_a_times is not None else np.array([])
+        self.unmatched_b_times = unmatched_b_times if unmatched_b_times is not None else np.array([])
+        # Counts for backwards compatibility
+        self.unmatched_a = len(self.unmatched_a_times)
+        self.unmatched_b = len(self.unmatched_b_times)
 
 
 def match_edges(
@@ -99,6 +105,8 @@ def match_edges(
 
     matched_a = []
     matched_b = []
+    matched_b_indices = set()  # Track which B edges are used
+    unmatched_a = []  # A edges that didn't find a match
 
     j = 0
     for t_a in times_a:
@@ -123,7 +131,14 @@ def match_edges(
         if best_idx is not None and best_dist < max_delay_samples:
             matched_a.append(t_a)
             matched_b.append(times_b[best_idx])
+            matched_b_indices.add(best_idx)
             j = best_idx + 1  # Move past matched B edge
+        else:
+            # This A edge didn't match any B edge
+            unmatched_a.append(t_a)
+
+    # Find B edges that were never matched
+    unmatched_b = [times_b[i] for i in range(len(times_b)) if i not in matched_b_indices]
 
     matched_a = np.array(matched_a)
     matched_b = np.array(matched_b)
@@ -135,4 +150,6 @@ def match_edges(
         delays=delays,
         total_a=len(times_a),
         total_b=len(times_b),
+        unmatched_a_times=np.array(unmatched_a),
+        unmatched_b_times=np.array(unmatched_b),
     )

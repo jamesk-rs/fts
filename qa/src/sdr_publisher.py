@@ -94,16 +94,21 @@ class SDRPublisher:
 
     def publish_edge(
         self,
-        channel_a_ns: int,
-        channel_b_ns: int,
+        channel_a_ns: Optional[int] = None,
+        channel_b_ns: Optional[int] = None,
         timestamp: Optional[float] = None,
     ) -> bool:
         """
         Publish edge timing to MQTT.
 
+        Can publish:
+        - Matched edges: both channel_a_ns and channel_b_ns provided
+        - Unmatched A edge: only channel_a_ns provided
+        - Unmatched B edge: only channel_b_ns provided
+
         Args:
-            channel_a_ns: Channel A edge time in nanoseconds
-            channel_b_ns: Channel B edge time in nanoseconds
+            channel_a_ns: Channel A edge time in nanoseconds (optional)
+            channel_b_ns: Channel B edge time in nanoseconds (optional)
             timestamp: Optional timestamp (default: current time)
 
         Returns:
@@ -113,12 +118,16 @@ class SDRPublisher:
             logger.warning("Not connected to MQTT broker")
             return False
 
-        payload = {
-            "ts": timestamp or time.time(),
-            "channel_a_edge_ns": channel_a_ns,
-            "channel_b_edge_ns": channel_b_ns,
-            "delay_ns": channel_b_ns - channel_a_ns,
-        }
+        if channel_a_ns is None and channel_b_ns is None:
+            logger.warning("publish_edge called with no edge data")
+            return False
+
+        payload = {"ts": timestamp or time.time()}
+
+        if channel_a_ns is not None:
+            payload["channel_a_edge_ns"] = channel_a_ns
+        if channel_b_ns is not None:
+            payload["channel_b_edge_ns"] = channel_b_ns
 
         result = self.mqtt.publish(self.topic, json.dumps(payload), qos=0)
         return result.rc == mqtt.MQTT_ERR_SUCCESS
@@ -176,7 +185,7 @@ class SDRPublisher:
         sample_rate: float = 10e6,
     ) -> int:
         """
-        Publish a batch of edges with computed timestamps.
+        Publish a batch of matched edges with computed timestamps.
 
         Args:
             edges: List of (channel_a_ns, channel_b_ns) tuples
@@ -192,7 +201,7 @@ class SDRPublisher:
         for i, (ch_a, ch_b) in enumerate(edges):
             # Compute timestamp based on sample position
             edge_ts = ts + (i / sample_rate)
-            if self.publish_edge(ch_a, ch_b, edge_ts):
+            if self.publish_edge(channel_a_ns=ch_a, channel_b_ns=ch_b, timestamp=edge_ts):
                 count += 1
 
         return count
@@ -221,7 +230,7 @@ def test_publisher(host: str, port: int, count: int, interval: float):
         delay = base_delay_ns + random.randint(-jitter_ns, jitter_ns)
         ch_b = ch_a + delay
 
-        if publisher.publish_edge(ch_a, ch_b):
+        if publisher.publish_edge(channel_a_ns=ch_a, channel_b_ns=ch_b):
             print(f"  Edge {i+1}: delay={delay}ns")
         else:
             print(f"  Edge {i+1}: FAILED")
