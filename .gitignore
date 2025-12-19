@@ -19,4 +19,5 @@ sdkconfig
 sdkconfig.local
 bin/config.local
 
-docs/fts-presa-extracted
+docs/fts-presa-extracted/
+fts-platform/backups/

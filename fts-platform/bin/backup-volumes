@@ -1,0 +1,47 @@
+#!/bin/bash
+# Backup Docker volumes for fts-platform
+# Creates timestamped tarballs in backups/ directory
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLATFORM_DIR="$(dirname "$SCRIPT_DIR")"
+BACKUP_DIR="$PLATFORM_DIR/backups"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# Volume names (docker compose prepends project name)
+PROJECT="fts-platform"
+VOLUMES=(
+    "influxdb_data"
+    "grafana_data"
+    "mosquitto_data"
+    "mosquitto_log"
+    "redis_data"
+)
+
+mkdir -p "$BACKUP_DIR"
+
+echo "Backing up Docker volumes to $BACKUP_DIR"
+echo "Timestamp: $TIMESTAMP"
+echo
+
+for vol in "${VOLUMES[@]}"; do
+    full_vol="${PROJECT}_${vol}"
+    backup_file="$BACKUP_DIR/${vol}_${TIMESTAMP}.tar.gz"
+
+    # Check if volume exists
+    if docker volume inspect "$full_vol" &>/dev/null; then
+        echo "Backing up $full_vol..."
+        docker run --rm \
+            -v "$full_vol":/data:ro \
+            -v "$BACKUP_DIR":/backup \
+            alpine tar czf "/backup/${vol}_${TIMESTAMP}.tar.gz" -C /data .
+        echo "  -> $(basename "$backup_file")"
+    else
+        echo "Skipping $full_vol (does not exist)"
+    fi
+done
+
+echo
+echo "Backup complete. Files:"
+ls -lh "$BACKUP_DIR"/*_${TIMESTAMP}.tar.gz 2>/dev/null || echo "No backups created"
