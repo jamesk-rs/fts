@@ -236,9 +236,9 @@ def cmd_capture(args):
 
 def cmd_stream_mqtt(args):
     """Continuous capture with live MQTT publishing to RL engine"""
+    from collections import deque
     from capture.usrp import USRPCapture
     from detect import StreamingCrossingDetector
-    from analyze import match_edges
     from analyze.stats import compute_stats
     from sdr_publisher import SDRPublisher
     import time
@@ -274,20 +274,22 @@ def cmd_stream_mqtt(args):
         skip_samples=int(0.1 * args.sample_rate),
     )
 
-    # Rolling window: keep only last 60 seconds of edges (memory-bounded)
+    # Rolling window for stats
     WINDOW_SECONDS = 60.0
-    window_samples = int(WINDOW_SECONDS * args.sample_rate)
 
-    # Accumulators for edges (use falling edges - more reliable for AC-coupled)
-    all_falling_a = []
-    all_falling_b = []
+    # Edge queues - two-pointer merge algorithm
+    queue_a = deque()  # Edge times in samples
+    queue_b = deque()
+
+    # Matching thresholds
+    max_match_delay = 0.1 / args.pulse_freq * args.sample_rate  # 10% of period
+    safety_buffer = 0.5 / args.pulse_freq * args.sample_rate    # 50% of period
 
     chunk_count = 0
     start_time = time.time()
-    last_report_time = start_time
+    next_report_time = start_time + 10.0
     edges_published = 0
     stats_published = 0
-    last_published_time = 0  # Track last published edge time to avoid duplicates
 
     # # Timing accumulators for profiling
     # time_detect = 0.0
@@ -303,21 +305,20 @@ def cmd_stream_mqtt(args):
     window_edges_a = 0
     window_edges_b = 0
     window_matched = 0
+    window_unmatched_a = 0
+    window_unmatched_b = 0
 
     def process_chunk(data):
-        nonlocal chunk_count, last_report_time, edges_published, stats_published, last_published_time
-        nonlocal all_falling_a, all_falling_b, all_delay_batches
-        nonlocal window_edges_a, window_edges_b, window_matched
-        # nonlocal time_detect, time_match, time_publish, time_stats
+        nonlocal chunk_count, next_report_time, edges_published, stats_published
+        nonlocal all_delay_batches
+        nonlocal window_edges_a, window_edges_b, window_matched, window_unmatched_a, window_unmatched_b
 
         chan_a = data.real
         chan_b = data.imag
 
         # Detect edges in this chunk (returns Nx2 array: [[time, type], ...])
-        # t0 = time.perf_counter()
         edges_a = detector_a.process(chan_a)
         edges_b = detector_b.process(chan_b)
-        # time_detect += time.perf_counter() - t0
 
         # Accumulate falling edges (type == 1)
         falling_a = edges_a[edges_a[:, 1] == 1, 0] if len(edges_a) > 0 else np.array([])
@@ -327,65 +328,65 @@ def cmd_stream_mqtt(args):
         window_edges_a += len(falling_a)
         window_edges_b += len(falling_b)
 
-        if len(falling_a) > 0:
-            all_falling_a.append(falling_a)
-        if len(falling_b) > 0:
-            all_falling_b.append(falling_b)
+        # Add new edges to queues
+        queue_a.extend(falling_a.tolist())
+        queue_b.extend(falling_b.tolist())
 
         chunk_count += 1
 
-        # Match edges and publish to MQTT
-        if len(falling_a) > 0 and len(falling_b) > 0:
-            # Get recent edges for matching
-            recent_a = np.concatenate(all_falling_a[-10:]) if all_falling_a else np.array([])
-            recent_b = np.concatenate(all_falling_b[-10:]) if all_falling_b else np.array([])
+        # Two-pointer merge: match edges from oldest to newest
+        if queue_a and queue_b:
+            # Find newest edge across both queues
+            newest = max(queue_a[-1], queue_b[-1])
+            safe_cutoff = newest - safety_buffer
 
-            if len(recent_a) > 0 and len(recent_b) > 0:
-                # t0 = time.perf_counter()
-                result = match_edges(
-                    recent_a, recent_b, args.sample_rate, pulse_freq=args.pulse_freq
-                )
-                # time_match += time.perf_counter() - t0
+            # Collect delays for this batch
+            batch_delays = []
 
-                # Save delays for stats (avoid re-matching later)
-                if len(result.delays) > 0:
-                    all_delay_batches.append((time.time(), result.delays))
+            # Process edges that are old enough
+            while queue_a and queue_b:
+                a = queue_a[0]
+                b = queue_b[0]
 
-                # Publish only new matches to MQTT (avoid duplicates)
-                # t0 = time.perf_counter()
-                new_matched = 0
-                for t_a, t_b in zip(result.matched_a, result.matched_b):
-                    # Skip already published edges
-                    if t_a <= last_published_time:
-                        continue
-                    # Convert sample times to nanoseconds
-                    ch_a_ns = int(t_a / args.sample_rate * 1e9)
-                    ch_b_ns = int(t_b / args.sample_rate * 1e9)
+                # Don't process edges too close to newest data
+                if a > safe_cutoff or b > safe_cutoff:
+                    break
+
+                diff = b - a  # positive = B is later
+
+                if abs(diff) <= max_match_delay:
+                    # Match - publish with both channels
+                    queue_a.popleft()
+                    queue_b.popleft()
+                    ch_a_ns = int(a / args.sample_rate * 1e9)
+                    ch_b_ns = int(b / args.sample_rate * 1e9)
                     if publisher.publish_edge(channel_a_ns=ch_a_ns, channel_b_ns=ch_b_ns):
                         edges_published += 1
-                        new_matched += 1
-                        last_published_time = t_a
-
-                # Publish unmatched A edges (only channel_a_ns)
-                for t_a in result.unmatched_a_times:
-                    if t_a <= last_published_time:
-                        continue
-                    ch_a_ns = int(t_a / args.sample_rate * 1e9)
+                        window_matched += 1
+                    # Store delay in seconds for stats
+                    batch_delays.append(diff / args.sample_rate)
+                elif diff > 0:
+                    # B is later than A - A missed its match
+                    queue_a.popleft()
+                    ch_a_ns = int(a / args.sample_rate * 1e9)
                     if publisher.publish_edge(channel_a_ns=ch_a_ns):
                         edges_published += 1
-
-                # Publish unmatched B edges (only channel_b_ns)
-                for t_b in result.unmatched_b_times:
-                    ch_b_ns = int(t_b / args.sample_rate * 1e9)
+                        window_unmatched_a += 1
+                else:
+                    # A is later than B - B missed its match
+                    queue_b.popleft()
+                    ch_b_ns = int(b / args.sample_rate * 1e9)
                     if publisher.publish_edge(channel_b_ns=ch_b_ns):
                         edges_published += 1
+                        window_unmatched_b += 1
 
-                window_matched += new_matched
-                # time_publish += time.perf_counter() - t0
+            # Save delays for stats
+            if batch_delays:
+                all_delay_batches.append((time.time(), np.array(batch_delays)))
 
-        # Report every 10 seconds (reduce CPU load to avoid UHD underflows)
+        # Report every 10 seconds
         now = time.time()
-        if now - last_report_time >= 10.0:
+        if now > next_report_time:
             # t0 = time.perf_counter()
             elapsed = now - start_time
             samples = detector_a.samples_processed
@@ -415,20 +416,24 @@ def cmd_stream_mqtt(args):
                     stats_published += 1
                 # time_stats += time.perf_counter() - t0
                 print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                      f"A={window_edges_a} B={window_edges_b} matched={len(combined_delays)}, "
-                      f"mean={stats.mean_ns:+.1f}ns, std={stats.std_ns:.1f}ns, ovf={capture._overflow_count}")
+                      f"A={window_edges_a} B={window_edges_b} matched={len(combined_delays)} "
+                      f"unmatchedA={window_unmatched_a} unmatchedB={window_unmatched_b}, "
+                      f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns ovf={capture._overflow_count}")
                 # print(f"         timing: detect={time_detect:.2f}s, match={time_match:.2f}s, publish={time_publish:.2f}s, stats={time_stats:.2f}s")
             else:
                 # Publish stats even without delays to show channel health
                 publisher.publish_stats({}, capture._overflow_count, channel_stats)
                 print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                      f"A={window_edges_a} B={window_edges_b} delays={len(combined_delays)}, ovf={capture._overflow_count}")
+                      f"A={window_edges_a} B={window_edges_b} delays={len(combined_delays)} "
+                      f"unmatchedA={window_unmatched_a} unmatchedB={window_unmatched_b}, ovf={capture._overflow_count}")
 
             # Reset window counters
             window_edges_a = 0
             window_edges_b = 0
             window_matched = 0
-            last_report_time = now
+            window_unmatched_a = 0
+            window_unmatched_b = 0
+            next_report_time += 10.0
 
         return True  # Continue streaming
 
@@ -710,11 +715,16 @@ def cmd_capture_edges(args):
     writer_a = EdgeFileWriter(output_dir, channel=0)
     writer_b = EdgeFileWriter(output_dir, channel=1)
 
+    REPORT_PERIOD = 1.0  # seconds
     start_time = time.time()
-    last_report_time = start_time
+    next_report_time = start_time + REPORT_PERIOD
+
+    last_report_edge_count_a = 0
+    last_report_edge_count_b = 0
 
     def process_chunk(data):
-        nonlocal last_report_time
+        nonlocal start_time, next_report_time, REPORT_PERIOD
+        nonlocal last_report_edge_count_a, last_report_edge_count_b
 
         # Extract channels from complex data (float64 for edge detector precision)
         chan_a = data.real.astype(np.float64)
@@ -732,12 +742,14 @@ def cmd_capture_edges(args):
 
         # Periodic report
         now = time.time()
-        if now - last_report_time >= 1.0:
+        if now > next_report_time:
             elapsed = now - start_time
             samples = detector_a.samples_processed
             print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                  f"edges: A={writer_a.edge_count}, B={writer_b.edge_count}")
-            last_report_time = now
+                  f"edges: A={writer_a.edge_count} (+{last_report_edge_count_a - writer_a.edge_count}), B={writer_b.edge_count} (+{last_report_edge_count_b - writer_b.edge_count})")
+            next_report_time += REPORT_PERIOD
+            last_report_edge_count_a = writer_a.edge_count
+            last_report_edge_count_b = writer_b.edge_count
 
         return True  # Continue streaming
 
