@@ -2,7 +2,10 @@
   "annotations": {
     "list": [
       {
-        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influxdb"
+        },
         "enable": true,
         "hide": false,
         "iconColor": "rgba(255, 96, 96, 1)",
@@ -25,7 +28,7 @@
       "keepTime": false,
       "tags": [],
       "targetBlank": false,
-      "title": "⏱ Go to Experiment",
+      "title": "\u23f1 Go to Experiment",
       "tooltip": "Navigate to the selected experiment's time range",
       "type": "link",
       "url": "/d/sdr-stats-dashboard?orgId=1&from=${exp_start}&to=${exp_end}&refresh=5s&var-experiment=${experiment}"
@@ -98,7 +101,10 @@
       "id": 1,
       "options": {
         "legend": {
-          "calcs": ["mean", "lastNotNull"],
+          "calcs": [
+            "mean",
+            "lastNotNull"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -190,7 +196,10 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": ["max", "lastNotNull"],
+          "calcs": [
+            "max",
+            "lastNotNull"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -278,7 +287,10 @@
                 "id": "custom.lineStyle",
                 "value": {
                   "fill": "dash",
-                  "dash": [10, 5]
+                  "dash": [
+                    10,
+                    5
+                  ]
                 }
               },
               {
@@ -297,7 +309,10 @@
                 "id": "custom.lineStyle",
                 "value": {
                   "fill": "dash",
-                  "dash": [10, 5]
+                  "dash": [
+                    10,
+                    5
+                  ]
                 }
               },
               {
@@ -305,19 +320,106 @@
                 "value": 0
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u03c3 upper"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dot"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u03c3 lower"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dot"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
           }
         ]
       },
       "gridPos": {
-        "h": 10,
+        "h": 11,
         "w": 12,
         "x": 0,
-        "y": 4
+        "y": 8
       },
       "id": 3,
       "options": {
         "legend": {
-          "calcs": ["mean", "min", "max", "lastNotNull"],
+          "calcs": [
+            "mean",
+            "min",
+            "max",
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -337,6 +439,24 @@
           },
           "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"sdr_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"mean_ns\" or r[\"_field\"] == \"min_ns\" or r[\"_field\"] == \"max_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"sdr_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"mean_ns\" or r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({_time: r._time, _value: r.mean_ns + r.std_ns}))",
+          "refId": "B",
+          "alias": "\u03c3 upper"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"sdr_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"mean_ns\" or r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({_time: r._time, _value: r.mean_ns - r.std_ns}))",
+          "refId": "C",
+          "alias": "\u03c3 lower"
         }
       ]
     },
@@ -397,15 +517,18 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 10,
+        "h": 11,
         "w": 12,
         "x": 12,
-        "y": 4
+        "y": 8
       },
       "id": 4,
       "options": {
         "legend": {
-          "calcs": ["mean", "lastNotNull"],
+          "calcs": [
+            "mean",
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -504,12 +627,14 @@
         "h": 4,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 4
       },
       "id": 5,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -608,12 +733,14 @@
         "h": 4,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 4
       },
       "id": 8,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -661,16 +788,19 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 5,
         "w": 12,
-        "x": 0,
-        "y": 18
+        "x": 12,
+        "y": 25
       },
       "id": 6,
       "options": {
         "bucketCount": 30,
         "legend": {
-          "calcs": ["mean", "stdDev"],
+          "calcs": [
+            "mean",
+            "stdDev"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -701,7 +831,8 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "blue"
           },
           "custom": {
             "axisBorderShow": false,
@@ -710,8 +841,8 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
+            "drawStyle": "points",
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -720,12 +851,12 @@
             },
             "insertNulls": 20000,
             "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
+            "lineWidth": 1,
+            "pointSize": 2,
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "always",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -747,18 +878,54 @@
           },
           "unit": "ns"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*mean.*"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 11,
         "w": 12,
-        "x": 12,
-        "y": 18
+        "x": 0,
+        "y": 19
       },
       "id": 7,
       "options": {
         "legend": {
-          "calcs": ["mean", "min", "max"],
+          "calcs": [
+            "mean",
+            "min",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -768,7 +935,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Std Dev (sdr_stats, 60s rolling)",
+      "title": "Delay Scatter (edges)",
       "type": "timeseries",
       "targets": [
         {
@@ -776,8 +943,17 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"sdr_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
-          "refId": "A"
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> aggregateWindow(every: duration(v: int(v: v.windowPeriod) / 5), fn: last, createEmpty: false)",
+          "refId": "A",
+          "maxDataPoints": 10000
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> aggregateWindow(every: 10s, fn: mean, createEmpty: false)\n  |> set(key: \"_field\", value: \"mean_10s\")",
+          "refId": "B"
         }
       ]
     },
@@ -840,13 +1016,16 @@
       "gridPos": {
         "h": 6,
         "w": 12,
-        "x": 0,
-        "y": 26
+        "x": 12,
+        "y": 19
       },
       "id": 9,
       "options": {
         "legend": {
-          "calcs": ["mean", "lastNotNull"],
+          "calcs": [
+            "mean",
+            "lastNotNull"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -868,105 +1047,24 @@
           "refId": "A"
         }
       ]
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influxdb"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": 20000,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "ns"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 26
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "min", "max", "lastNotNull"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "title": "Delay Mean (edges, 10s Flux aggregation)",
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> aggregateWindow(every: 10s, fn: mean, createEmpty: false)",
-          "refId": "A"
-        }
-      ]
     }
   ],
   "refresh": "10s",
   "schemaVersion": 38,
-  "tags": ["fts", "sdr", "edges"],
+  "tags": [
+    "fts",
+    "sdr",
+    "edges"
+  ],
   "templating": {
     "list": [
       {
         "allValue": "__all__",
         "current": {},
-        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influxdb"
+        },
         "definition": "Experiments",
         "hide": 0,
         "includeAll": true,
@@ -983,7 +1081,10 @@
       },
       {
         "current": {},
-        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influxdb"
+        },
         "definition": "Experiment Start",
         "hide": 2,
         "includeAll": false,
@@ -999,7 +1100,10 @@
       },
       {
         "current": {},
-        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influxdb"
+        },
         "definition": "Experiment End",
         "hide": 2,
         "includeAll": false,
