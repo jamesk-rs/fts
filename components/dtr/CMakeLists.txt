@@ -14,5 +14,5 @@ idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS "include"
     REQUIRES driver dtc
-    PRIV_REQUIRES esp_wifi clock
+    PRIV_REQUIRES esp_wifi clock fts_mqtt
 )

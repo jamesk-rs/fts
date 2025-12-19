@@ -12,10 +12,6 @@
 #include "freertos/task.h"
 #include <math.h>
 
-#ifdef CONFIG_FTS_MQTT_ENABLED
-#include "fts_mqtt.h"
-#include "esp_timer.h"
-#endif
 
 static const char *TAG = "dtc";
 
@@ -171,22 +167,8 @@ void dtc_crm_updated(void)
     // Step 11: Wait for alignment to be applied
     dtr_wait_for_tez();
 
-    // Step 12: Grab and log feedback
+    // Step 12: Grab and log feedback (MQTT publishing is done inside DTR)
     dtr_grab_n_log_align_feedback();
-
-#ifdef CONFIG_FTS_MQTT_ENABLED
-    // Publish metrics via MQTT
-    if (fts_mqtt_is_connected()) {
-        int32_t period_delta = (int32_t)(aligned_base_period_fp16 -
-                                          (int64_t)(DTR_TIMER_PERIOD_TICKS * FP16_SCALE));
-        fts_mqtt_publish_metrics(
-            esp_timer_get_time(),
-            aligned_cycle_counter,
-            (int32_t)(aligned_base_period_fp16 >> 16),  // Period in ticks
-            period_delta
-        );
-    }
-#endif
 
     // Update state
     if (s_first_update) {

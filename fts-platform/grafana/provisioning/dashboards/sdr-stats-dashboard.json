@@ -108,7 +108,7 @@
           "sort": "none"
         }
       },
-      "title": "Matched Edge Count (10s)",
+      "title": "Matched Edges (sdr_stats, per 10s report)",
       "type": "timeseries",
       "targets": [
         {
@@ -200,7 +200,7 @@
           "sort": "none"
         }
       },
-      "title": "UHD Overflow Count",
+      "title": "UHD Overflows (sdr_stats, per 10s report)",
       "type": "timeseries",
       "targets": [
         {
@@ -327,7 +327,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay (Min/Mean/Max)",
+      "title": "Delay Min/Mean/Max (sdr_stats, 60s rolling)",
       "type": "timeseries",
       "targets": [
         {
@@ -415,7 +415,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Percentiles",
+      "title": "Delay Percentiles (sdr_stats, 60s rolling)",
       "type": "timeseries",
       "targets": [
         {
@@ -495,29 +495,6 @@
                   "fixedColor": "green",
                   "mode": "fixed"
                 }
-              },
-              {
-                "id": "displayName",
-                "value": "Detected"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "matched_count"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "Matched"
               }
             ]
           }
@@ -542,7 +519,7 @@
           "sort": "none"
         }
       },
-      "title": "Channel A (10s)",
+      "title": "Channel A Detected (sdr_stats, per 10s report)",
       "type": "timeseries",
       "targets": [
         {
@@ -550,7 +527,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"sdr_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"channel_a_edges\" or r[\"_field\"] == \"matched_count\")",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"sdr_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"channel_a_edges\")",
           "refId": "A"
         }
       ]
@@ -622,29 +599,6 @@
                   "fixedColor": "blue",
                   "mode": "fixed"
                 }
-              },
-              {
-                "id": "displayName",
-                "value": "Detected"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "matched_count"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "Matched"
               }
             ]
           }
@@ -669,7 +623,7 @@
           "sort": "none"
         }
       },
-      "title": "Channel B (10s)",
+      "title": "Channel B Detected (sdr_stats, per 10s report)",
       "type": "timeseries",
       "targets": [
         {
@@ -677,7 +631,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"sdr_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"channel_b_edges\" or r[\"_field\"] == \"matched_count\")",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"sdr_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"channel_b_edges\")",
           "refId": "A"
         }
       ]
@@ -726,7 +680,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Distribution (from raw edges)",
+      "title": "Delay Histogram (edges, sampled 2000)",
       "type": "histogram",
       "targets": [
         {
@@ -814,7 +768,7 @@
           "sort": "none"
         }
       },
-      "title": "Std Deviation Over Time",
+      "title": "Delay Std Dev (sdr_stats, 60s rolling)",
       "type": "timeseries",
       "targets": [
         {
@@ -902,7 +856,7 @@
           "sort": "none"
         }
       },
-      "title": "Edge Count (Flux - from raw edges)",
+      "title": "Edge Count (edges, 10s Flux aggregation)",
       "type": "timeseries",
       "targets": [
         {
@@ -990,7 +944,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Mean (Flux - from raw edges)",
+      "title": "Delay Mean (edges, 10s Flux aggregation)",
       "type": "timeseries",
       "targets": [
         {

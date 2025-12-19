@@ -27,7 +27,9 @@ static bool s_connected = false;
 // Topic buffers
 static char s_topic_ftm[64];
 static char s_topic_ftm_stats[64];
-static char s_topic_metrics[64];
+static char s_topic_dtc_request[64];
+static char s_topic_crm_stats[64];
+static char s_topic_dtr_feedback[64];
 static char s_topic_control[64];
 
 /**
@@ -136,7 +138,9 @@ esp_err_t fts_mqtt_init(const fts_mqtt_config_t *config)
     // Build topic names
     snprintf(s_topic_ftm, sizeof(s_topic_ftm), "fts/%s/ftm", s_device_id);
     snprintf(s_topic_ftm_stats, sizeof(s_topic_ftm_stats), "fts/%s/ftm_stats", s_device_id);
-    snprintf(s_topic_metrics, sizeof(s_topic_metrics), "fts/%s/metrics", s_device_id);
+    snprintf(s_topic_dtc_request, sizeof(s_topic_dtc_request), "fts/%s/dtc_request", s_device_id);
+    snprintf(s_topic_crm_stats, sizeof(s_topic_crm_stats), "fts/%s/crm_stats", s_device_id);
+    snprintf(s_topic_dtr_feedback, sizeof(s_topic_dtr_feedback), "fts/%s/dtr_feedback", s_device_id);
     snprintf(s_topic_control, sizeof(s_topic_control), "fts/%s/control", s_device_id);
 
     ESP_LOGI(TAG, "Initializing MQTT client for device: %s", s_device_id);
@@ -248,8 +252,11 @@ esp_err_t fts_mqtt_publish_ftm(int64_t ts_us, uint32_t session_id,
     return (msg_id >= 0) ? ESP_OK : ESP_FAIL;
 }
 
-esp_err_t fts_mqtt_publish_metrics(int64_t ts_us, int64_t cycle_counter,
-                                    int32_t period_ticks, int32_t period_delta)
+esp_err_t fts_mqtt_publish_dtc_request(int64_t ts_us,
+                                        uint32_t cycle_counter,
+                                        uint32_t local_ticks,
+                                        uint32_t base_period,
+                                        uint32_t base_period_frac)
 {
     if (!s_connected) {
         return ESP_ERR_INVALID_STATE;
@@ -262,9 +269,10 @@ esp_err_t fts_mqtt_publish_metrics(int64_t ts_us, int64_t cycle_counter,
 
     // Add fields
     cJSON_AddNumberToObject(json, "ts", (double)ts_us / 1e6);
-    cJSON_AddNumberToObject(json, "cycle_counter", (double)cycle_counter);
-    cJSON_AddNumberToObject(json, "period_ticks", period_ticks);
-    cJSON_AddNumberToObject(json, "period_delta", period_delta);
+    cJSON_AddNumberToObject(json, "cycle_counter", cycle_counter);
+    cJSON_AddNumberToObject(json, "local_ticks", local_ticks);
+    cJSON_AddNumberToObject(json, "base_period", base_period);
+    cJSON_AddNumberToObject(json, "base_period_frac", base_period_frac);
 
     char *payload = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
@@ -273,9 +281,9 @@ esp_err_t fts_mqtt_publish_metrics(int64_t ts_us, int64_t cycle_counter,
         return ESP_ERR_NO_MEM;
     }
 
-    // QoS 0 for metrics (high frequency, loss acceptable)
-    int msg_id = esp_mqtt_client_publish(s_mqtt_client, s_topic_metrics,
-                                          payload, 0, 0, 0);
+    // QoS 1 for alignment request (important data)
+    int msg_id = esp_mqtt_client_publish(s_mqtt_client, s_topic_dtc_request,
+                                          payload, 0, 1, 0);
     free(payload);
 
     return (msg_id >= 0) ? ESP_OK : ESP_FAIL;
@@ -325,6 +333,76 @@ esp_err_t fts_mqtt_publish_ftm_stats(int64_t ts_us, uint32_t session_id,
 
     // QoS 1 for stats (important summary data)
     int msg_id = esp_mqtt_client_publish(s_mqtt_client, s_topic_ftm_stats,
+                                          payload, 0, 1, 0);
+    free(payload);
+
+    return (msg_id >= 0) ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t fts_mqtt_publish_crm_stats(int64_t ts_us, uint32_t samples,
+                                      uint8_t new_samples, float r_squared,
+                                      float std_ns, float ppm_lr)
+{
+    if (!s_connected) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *json = cJSON_CreateObject();
+    if (json == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Add fields
+    cJSON_AddNumberToObject(json, "ts", (double)ts_us / 1e6);
+    cJSON_AddNumberToObject(json, "samples", samples);
+    cJSON_AddNumberToObject(json, "new_samples", new_samples);
+    cJSON_AddNumberToObject(json, "r_squared", r_squared);
+    cJSON_AddNumberToObject(json, "std_ns", std_ns);
+    cJSON_AddNumberToObject(json, "ppm_lr", ppm_lr);
+
+    char *payload = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    if (payload == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    // QoS 1 for CRM stats (important regression data)
+    int msg_id = esp_mqtt_client_publish(s_mqtt_client, s_topic_crm_stats,
+                                          payload, 0, 1, 0);
+    free(payload);
+
+    return (msg_id >= 0) ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t fts_mqtt_publish_dtr_feedback(int64_t ts_us, int32_t period_ticks,
+                                         int32_t period_ticks_delta,
+                                         int32_t cycle_delta)
+{
+    if (!s_connected) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *json = cJSON_CreateObject();
+    if (json == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Add fields
+    cJSON_AddNumberToObject(json, "ts", (double)ts_us / 1e6);
+    cJSON_AddNumberToObject(json, "period_ticks", period_ticks);
+    cJSON_AddNumberToObject(json, "period_ticks_delta", period_ticks_delta);
+    cJSON_AddNumberToObject(json, "cycle_delta", cycle_delta);
+
+    char *payload = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    if (payload == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    // QoS 1 for DTR feedback (important alignment data)
+    int msg_id = esp_mqtt_client_publish(s_mqtt_client, s_topic_dtr_feedback,
                                           payload, 0, 1, 0);
     free(payload);
 

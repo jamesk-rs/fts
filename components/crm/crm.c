@@ -6,7 +6,9 @@
 
 #include "crm.h"
 #include "ftm.h"
+#include "fts_mqtt.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <math.h>
 #include <string.h>
 
@@ -227,5 +229,19 @@ void crm_process_ftm_report(uint32_t session_number,
                  s_residual_std_ns,
                  crm_slope_lr_m1 * 1e6f,
                  crm_slope_rl_m1 * 1e6f);
+
+#ifdef CONFIG_FTS_MQTT_ENABLED
+        // Publish CRM stats via MQTT
+        if (fts_mqtt_is_connected()) {
+            fts_mqtt_publish_crm_stats(
+                esp_timer_get_time(),
+                s_sample_count,
+                count,
+                s_r_squared,
+                s_residual_std_ns,
+                (float)(crm_slope_lr_m1 * 1e6)  // Convert to ppm
+            );
+        }
+#endif
     }
 }

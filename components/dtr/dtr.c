@@ -20,6 +20,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef CONFIG_FTS_MQTT_ENABLED
+#include "fts_mqtt.h"
+#include "esp_timer.h"
+#endif
+
 #if CONFIG_FTS_MAC_TIMER_ALIGNMENT_TEST_CYCLES
 #include "esp_random.h"
 #endif
@@ -445,6 +450,17 @@ void dtr_set_align_request_inst(dtr_instance_t *inst,
              (long long)aligned_local_ticks,
              (long long)aligned_base_period_fp16 / FP16_SCALE,
              (long long)aligned_base_period_fp16 % FP16_SCALE);
+
+#ifdef CONFIG_FTS_MQTT_ENABLED
+    if (fts_mqtt_is_connected()) {
+        fts_mqtt_publish_dtc_request(
+            esp_timer_get_time(),
+            (uint32_t)aligned_cycle_counter,
+            (uint32_t)aligned_local_ticks,
+            (uint32_t)(aligned_base_period_fp16 / FP16_SCALE),
+            (uint32_t)(aligned_base_period_fp16 % FP16_SCALE));
+    }
+#endif
 }
 
 void dtr_wait_for_tez_inst(dtr_instance_t *inst)
@@ -475,6 +491,16 @@ void dtr_grab_n_log_align_feedback_inst(dtr_instance_t *inst)
            feedback.cycle_delta,
            feedback.period_ticks,
            feedback.period_ticks_delta);
+#endif
+
+#ifdef CONFIG_FTS_MQTT_ENABLED
+    if (fts_mqtt_is_connected()) {
+        fts_mqtt_publish_dtr_feedback(
+            esp_timer_get_time(),
+            feedback.period_ticks,
+            feedback.period_ticks_delta,
+            feedback.cycle_delta);
+    }
 #endif
 }
 
