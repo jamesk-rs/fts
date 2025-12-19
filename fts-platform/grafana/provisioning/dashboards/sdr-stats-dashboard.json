@@ -538,7 +538,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Percentiles (sdr_stats, 60s rolling)",
+      "title": "Jitter Percentiles (sdr_stats, 60s rolling)",
       "type": "timeseries",
       "targets": [
         {
