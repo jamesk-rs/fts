@@ -295,7 +295,8 @@ def cmd_stream_mqtt(args):
     # time_stats = 0.0
 
     # Accumulate delays in rolling window for stats (avoid re-matching)
-    all_delays = []
+    # Store (wall_clock_time, delay_array) tuples for time-based expiration
+    all_delay_batches = []
 
     # Per-channel edge counts in current reporting window (10s)
     window_edges_a = 0
@@ -304,7 +305,7 @@ def cmd_stream_mqtt(args):
 
     def process_chunk(data):
         nonlocal chunk_count, last_report_time, edges_published, stats_published, last_published_time
-        nonlocal all_falling_a, all_falling_b, all_delays
+        nonlocal all_falling_a, all_falling_b, all_delay_batches
         nonlocal window_edges_a, window_edges_b, window_matched
         # nonlocal time_detect, time_match, time_publish, time_stats
 
@@ -347,7 +348,7 @@ def cmd_stream_mqtt(args):
 
                 # Save delays for stats (avoid re-matching later)
                 if len(result.delays) > 0:
-                    all_delays.append(result.delays)
+                    all_delay_batches.append((time.time(), result.delays))
 
                 # Publish only new matches to MQTT (avoid duplicates)
                 # t0 = time.perf_counter()
@@ -373,12 +374,15 @@ def cmd_stream_mqtt(args):
             elapsed = now - start_time
             samples = detector_a.samples_processed
 
-            # Trim delays to rolling window (by count, ~120k at 2000Hz for 60s)
-            max_delays = int(WINDOW_SECONDS * args.pulse_freq)
-            combined_delays = np.concatenate(all_delays) if all_delays else np.array([])
-            if len(combined_delays) > max_delays:
-                combined_delays = combined_delays[-max_delays:]
-                all_delays = [combined_delays]
+            # Expire old delay batches (time-based rolling window)
+            cutoff = now - WINDOW_SECONDS
+            all_delay_batches = [(t, d) for t, d in all_delay_batches if t > cutoff]
+
+            # Combine remaining delays
+            if all_delay_batches:
+                combined_delays = np.concatenate([d for _, d in all_delay_batches])
+            else:
+                combined_delays = np.array([])
 
             # Compute per-channel stats for this window
             channel_stats = {
@@ -433,7 +437,7 @@ def cmd_stream_mqtt(args):
 
     # Final stats (from accumulated delays)
     print("\n--- Final Statistics (rolling window) ---")
-    combined_delays = np.concatenate(all_delays) if all_delays else np.array([])
+    combined_delays = np.concatenate([d for _, d in all_delay_batches]) if all_delay_batches else np.array([])
 
     print(f"Total samples: {detector_a.samples_processed:,}")
     print(f"Total edges published: {edges_published}")
