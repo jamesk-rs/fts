@@ -253,8 +253,8 @@ esp_err_t fts_mqtt_publish_ftm(int64_t ts_us, uint32_t session_id,
 }
 
 esp_err_t fts_mqtt_publish_dtc_request(int64_t ts_us,
-                                        uint32_t cycle_counter,
-                                        uint32_t local_ticks,
+                                        int64_t cycle_counter,
+                                        int64_t local_ticks,
                                         uint32_t base_period,
                                         uint32_t base_period_frac)
 {
@@ -267,10 +267,14 @@ esp_err_t fts_mqtt_publish_dtc_request(int64_t ts_us,
         return ESP_ERR_NO_MEM;
     }
 
-    // Add fields
+    // Add fields - send 64-bit counters as strings to avoid overflow and JSON precision issues
     cJSON_AddNumberToObject(json, "ts", (double)ts_us / 1e6);
-    cJSON_AddNumberToObject(json, "cycle_counter", cycle_counter);
-    cJSON_AddNumberToObject(json, "local_ticks", local_ticks);
+    char cycle_counter_str[21];
+    snprintf(cycle_counter_str, sizeof(cycle_counter_str), "%lld", (long long)cycle_counter);
+    cJSON_AddStringToObject(json, "cycle_counter", cycle_counter_str);
+    char local_ticks_str[21];
+    snprintf(local_ticks_str, sizeof(local_ticks_str), "%lld", (long long)local_ticks);
+    cJSON_AddStringToObject(json, "local_ticks", local_ticks_str);
     cJSON_AddNumberToObject(json, "base_period", base_period);
     cJSON_AddNumberToObject(json, "base_period_frac", base_period_frac);
 

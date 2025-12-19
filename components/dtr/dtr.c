@@ -455,8 +455,8 @@ void dtr_set_align_request_inst(dtr_instance_t *inst,
     if (fts_mqtt_is_connected()) {
         fts_mqtt_publish_dtc_request(
             esp_timer_get_time(),
-            (uint32_t)aligned_cycle_counter,
-            (uint32_t)aligned_local_ticks,
+            aligned_cycle_counter,
+            aligned_local_ticks,
             (uint32_t)(aligned_base_period_fp16 / FP16_SCALE),
             (uint32_t)(aligned_base_period_fp16 % FP16_SCALE));
     }

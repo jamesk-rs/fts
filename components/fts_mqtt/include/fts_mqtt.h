@@ -93,8 +93,8 @@ esp_err_t fts_mqtt_publish_ftm(int64_t ts_us, uint32_t session_id,
  * @return ESP_OK on success
  */
 esp_err_t fts_mqtt_publish_dtc_request(int64_t ts_us,
-                                        uint32_t cycle_counter,
-                                        uint32_t local_ticks,
+                                        int64_t cycle_counter,
+                                        int64_t local_ticks,
                                         uint32_t base_period,
                                         uint32_t base_period_frac);
 
