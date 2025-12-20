@@ -11,6 +11,7 @@ DO_CLEAN=false
 DO_BUILD=false
 DO_FLASH=false
 DO_MONITOR=false
+NO_RESET=false
 TARGETS=()
 OUTPUT_DIR=""
 
@@ -46,16 +47,21 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
+        --no-reset)
+            NO_RESET=true
+            shift
+            ;;
         master|slave1|slave2|slaves|all)
             TARGETS+=("$1")
             shift
             ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: $0 [clean] [build] [flash] [monitor] [-o DATADIR] [targets...]"
+            echo "Usage: $0 [clean] [build] [flash] [monitor] [-o DATADIR] [--no-reset] [targets...]"
             echo "  Actions: clean, build, flash, monitor (can specify multiple)"
             echo "  Options:"
             echo "    -o DATADIR  - Log monitor output to DATADIR/{slave1,slave2}.log"
+            echo "    --no-reset  - Don't reset chip when starting monitor"
             echo "  Targets (can specify multiple):"
             echo "    master      - Master device only"
             echo "    slave1      - Slave 1 only"
@@ -225,6 +231,10 @@ if [[ "$DO_MONITOR" == true ]]; then
         echo "Logging to: $OUTPUT_DIR/"
     fi
 
+    # Build monitor arguments
+    MONITOR_ARGS=""
+    [[ "$NO_RESET" == true ]] && MONITOR_ARGS="--no-reset"
+
     if [[ $MON_COUNT -eq 0 ]]; then
         echo "No devices selected for monitoring"
     elif [[ $MON_COUNT -eq 1 ]]; then
@@ -235,19 +245,19 @@ if [[ "$DO_MONITOR" == true ]]; then
             . $ESP_IDF_EXPORT > /dev/null 2>&1
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/master.log"
-            stdbuf -oL idf.py -B $BUILDDIR_MASTER -p $SERIAL_PORT_MASTER monitor 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
+            stdbuf -oL idf.py -B $BUILDDIR_MASTER -p $SERIAL_PORT_MASTER monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
         elif $MON_SLAVE1; then
             echo "Monitoring SLAVE 1..."
             . $ESP_IDF_EXPORT > /dev/null 2>&1
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave1.log"
-            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_1 -p $SERIAL_PORT_SLAVE_1 monitor 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
+            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_1 -p $SERIAL_PORT_SLAVE_1 monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
         elif $MON_SLAVE2; then
             echo "Monitoring SLAVE 2..."
             . $ESP_IDF_EXPORT > /dev/null 2>&1
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave2.log"
-            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_2 -p $SERIAL_PORT_SLAVE_2 monitor 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
+            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_2 -p $SERIAL_PORT_SLAVE_2 monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
         fi
     else
         # Multiple monitors - use tmux
@@ -266,7 +276,7 @@ if [[ "$DO_MONITOR" == true ]]; then
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/master.log'"
             tmux send-keys -t fts_monitor \
-                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_MASTER -p $SERIAL_PORT_MASTER monitor 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_MASTER -p $SERIAL_PORT_MASTER monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
         fi
 
         if $MON_SLAVE1; then
@@ -278,7 +288,7 @@ if [[ "$DO_MONITOR" == true ]]; then
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave1.log'"
             tmux send-keys -t fts_monitor \
-                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_1 -p $SERIAL_PORT_SLAVE_1 monitor 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_1 -p $SERIAL_PORT_SLAVE_1 monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
         fi
 
         if $MON_SLAVE2; then
@@ -290,7 +300,7 @@ if [[ "$DO_MONITOR" == true ]]; then
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave2.log'"
             tmux send-keys -t fts_monitor \
-                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_2 -p $SERIAL_PORT_SLAVE_2 monitor 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_2 -p $SERIAL_PORT_SLAVE_2 monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
         fi
 
         # Balance panes and attach
