@@ -4,15 +4,20 @@ Hardware configuration for FTS-QA test setup.
 Fixed configuration:
 - Receiver (RX): 192.168.10.2 with GPSDO (always uses GPSDO clock)
 - Transmitter (TX): 192.168.10.3 (can use internal or MIMO clock from RX)
+
+Environment variables:
+- USRP_RX_ADDR: Override RX address (default: 192.168.10.2)
+- USRP_TX_ADDR: Override TX address (default: 192.168.10.3)
 """
 
+import os
 from dataclasses import dataclass
 from typing import Literal
 
 
-# Fixed hardware addresses
-RX_ADDR = "192.168.10.2"  # Receiver with GPSDO
-TX_ADDR = "192.168.10.3"  # Transmitter
+# Hardware addresses (can be overridden via environment)
+RX_ADDR = os.environ.get("USRP_RX_ADDR", "192.168.10.2")
+TX_ADDR = os.environ.get("USRP_TX_ADDR", "192.168.10.3")
 
 ClockSource = Literal["internal", "gpsdo", "mimo"]
 

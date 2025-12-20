@@ -442,6 +442,7 @@ def cmd_stream_mqtt(args):
         sample_rate=args.sample_rate,
         freq=args.freq,
         gain=args.gain,
+        addr=args.usrp_addr,
     )
 
     try:
@@ -1753,6 +1754,8 @@ def main():
                                help='MQTT broker host (default: localhost)')
     p_stream_mqtt.add_argument('--mqtt-port', type=int, default=1883,
                                help='MQTT broker port (default: 1883)')
+    p_stream_mqtt.add_argument('--usrp-addr', default=None,
+                               help='USRP RX address (default: USRP_RX_ADDR env or 192.168.10.2)')
     p_stream_mqtt.set_defaults(func=cmd_stream_mqtt)
 
     # generate command

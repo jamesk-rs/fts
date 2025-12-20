@@ -27,6 +27,7 @@ class USRPCapture:
         freq: float = 0.0,
         gain: float = 0.0,
         channels: Optional[list[int]] = None,
+        addr: Optional[str] = None,
     ):
         """
         Initialize USRP RX capture.
@@ -36,13 +37,17 @@ class USRPCapture:
             freq: Center frequency in Hz (default: 0 for baseband)
             gain: RX gain in dB (default: 0)
             channels: Channel indices (default: [0])
+            addr: USRP address (default: from USRP_RX_ADDR env or 192.168.10.2)
         """
-        self.config = RxConfig(
+        config_kwargs = dict(
             sample_rate=sample_rate,
             freq=freq,
             gain=gain,
             channels=channels,
         )
+        if addr is not None:
+            config_kwargs['addr'] = addr
+        self.config = RxConfig(**config_kwargs)
         self._usrp = None
         self._streamer = None
         self._overflow_count = 0

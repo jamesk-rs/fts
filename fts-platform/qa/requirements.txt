@@ -1,0 +1,13 @@
+# SDR capture and signal processing
+numpy>=1.24.0
+numba>=0.58.0
+scipy
+
+# Plotting (for reports)
+matplotlib
+
+# MQTT publishing
+paho-mqtt>=2.0.0
+
+# Note: UHD Python bindings (python3-uhd) come from system packages
+# They cannot be pip-installed and require --system-site-packages venv

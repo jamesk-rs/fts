@@ -106,6 +106,22 @@ services:
       - LOG_LEVEL=INFO
     restart: unless-stopped
 
+  stream-mqtt:
+    build: ./qa
+    profiles: ["sdr"]  # Only with: docker compose --profile sdr up
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    environment:
+      - USRP_RX_ADDR=192.168.10.2
+      - MQTT_HOST=mosquitto
+    command: ["stream-mqtt", "--mqtt-host", "mosquitto"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
 volumes:
   mosquitto_data:
   mosquitto_log:
