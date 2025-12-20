@@ -30,6 +30,10 @@ services:
       - influxdb_data:/var/lib/influxdb2
       - ./influxdb/init-buckets.sh:/docker-entrypoint-initdb.d/init-buckets.sh:ro
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
       interval: 30s
