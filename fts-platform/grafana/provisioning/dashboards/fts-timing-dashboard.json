@@ -143,17 +143,51 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 9 },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 9 },
       "id": 2,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM R-Squared",
+      "title": "CRM R-Squared - slave1",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"r_squared\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: r.device}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"r_squared\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "refId": "A"
+      }]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line",
+            "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" }
+          },
+          "decimals": 6, "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 9 },
+      "id": 14,
+      "options": {
+        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "CRM R-Squared - slave2",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"r_squared\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -177,23 +211,57 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 9 },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 14 },
       "id": 3,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM Residual Std Dev",
+      "title": "CRM Residual Std Dev - slave1",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: r.device}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "refId": "A"
+      }]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line",
+            "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 14 },
+      "id": 15,
+      "options": {
+        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "CRM Residual Std Dev - slave2",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 },
       "id": 101,
       "title": "CRM - Model Parameters",
       "type": "row"
@@ -218,7 +286,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 17 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 20 },
       "id": 4,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -252,7 +320,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 17 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 20 },
       "id": 12,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -268,7 +336,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
       "id": 102,
       "title": "DTC - Alignment Request",
       "type": "row"
@@ -293,7 +361,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 25 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 },
       "id": 5,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -328,7 +396,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 25 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 },
       "id": 6,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -363,17 +431,17 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 32 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 35 },
       "id": 7,
       "options": {
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Cycle Counter",
+      "title": "Cycle Counter - slave1",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: r.device}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -397,24 +465,93 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 32 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 35 },
+      "id": 20,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Cycle Counter - slave2",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+        "refId": "A"
+      }]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line",
+            "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 42 },
       "id": 13,
       "options": {
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Local Ticks",
+      "title": "Local Ticks - slave1",
       "description": "Aligned local ticks from DTC request",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"_field\"] == \"local_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: r.device}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"local_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+        "refId": "A"
+      }]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line",
+            "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 42 },
+      "id": 16,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Local Ticks - slave2",
+      "description": "Aligned local ticks from DTC request",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"local_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
         "refId": "A"
       }]
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 },
       "id": 104,
       "title": "DTR - Alignment Feedback",
       "type": "row"
@@ -439,18 +576,18 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 40 },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 50 },
       "id": 8,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Feedback Period Ticks",
+      "title": "Period Ticks - slave1",
       "description": "Actual period applied by DTR ISR",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: r.device}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -474,18 +611,18 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 40 },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 55 },
       "id": 9,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Feedback Period Delta",
+      "title": "Period Delta - slave1",
       "description": "Change in period from previous alignment",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: r.device}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -509,18 +646,123 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 40 },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 60 },
       "id": 10,
       "options": {
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Feedback Cycle Delta",
+      "title": "Cycle Delta - slave1",
       "description": "Change in cycle counter (normally 1)",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: r.device}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "refId": "A"
+      }]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line",
+            "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 50 },
+      "id": 17,
+      "options": {
+        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Period Ticks - slave2",
+      "description": "Actual period applied by DTR ISR",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "refId": "A"
+      }]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line",
+            "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 55 },
+      "id": 18,
+      "options": {
+        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Period Delta - slave2",
+      "description": "Change in period from previous alignment",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "refId": "A"
+      }]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line",
+            "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 60 },
+      "id": 19,
+      "options": {
+        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Cycle Delta - slave2",
+      "description": "Change in cycle counter (normally 1)",
+      "type": "timeseries",
+      "targets": [{
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     }
