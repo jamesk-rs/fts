@@ -1,7 +1,7 @@
 on rpi
 ```
-sudo usbip bind -b 3-2
 sudo modprobe usbip-host
+sudo usbipd -D
 sudo usbip bind -b 3-2
 ```
 
