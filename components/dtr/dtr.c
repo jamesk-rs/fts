@@ -104,7 +104,8 @@ bool IRAM_ATTR dtr_core_period_handler(dtr_instance_t *inst)
         inst->period_ticks_frac_acc = 0;
 
         // Roll forward if period too short
-        while (inst->period_ticks < DTR_MIN_PERIOD_TICKS) {
+        // Cast to signed to avoid signed/unsigned comparison bug where -1 becomes ULLONG_MAX
+        while (inst->period_ticks < (int64_t)DTR_MIN_PERIOD_TICKS) {
             inst->period_ticks += inst->base_period_fp16 / FP16_SCALE;
             inst->period_ticks_frac_acc += inst->base_period_fp16 % FP16_SCALE;
             if (inst->period_ticks_frac_acc >= FP16_SCALE) {
