@@ -375,8 +375,7 @@
             "matcher": { "id": "byName", "options": "std_ns" },
             "properties": [
               { "id": "displayName", "value": "std" },
-              { "id": "custom.lineStyle", "value": { "fill": "dot" } },
-              { "id": "custom.fillOpacity", "value": 0 }
+              { "id": "custom.hideFrom", "value": { "legend": false, "tooltip": false, "viz": true } }
             ]
           },
           {
@@ -857,10 +856,27 @@
           },
           "unit": "ns"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "B" },
+            "properties": [{ "id": "displayName", "value": "P50" }]
+          },
+          {
+            "matcher": { "id": "byFrameRefID", "options": "C" },
+            "properties": [{ "id": "displayName", "value": "P90" }]
+          },
+          {
+            "matcher": { "id": "byFrameRefID", "options": "D" },
+            "properties": [{ "id": "displayName", "value": "P99" }]
+          },
+          {
+            "matcher": { "id": "byFrameRefID", "options": "E" },
+            "properties": [{ "id": "displayName", "value": "P99.9" }]
+          }
+        ]
       },
       "gridPos": {
-        "h": 11,
+        "h": 13,
         "w": 12,
         "x": 12,
         "y": 19
@@ -871,8 +887,8 @@
         "legend": {
           "calcs": [
             "min",
-            "max",
             "mean",
+            "max",
             "stdDev"
           ],
           "displayMode": "table",
@@ -1004,7 +1020,7 @@
         ]
       },
       "gridPos": {
-        "h": 11,
+        "h": 13,
         "w": 12,
         "x": 0,
         "y": 19
@@ -1012,12 +1028,8 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1026,7 +1038,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Scatter (edges)",
+      "title": "Delay Scatter (edges, 10s rolling mean)",
       "type": "timeseries",
       "targets": [
         {
