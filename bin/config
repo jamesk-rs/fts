@@ -1,4 +1,5 @@
 BUILDDIR_MASTER=build_master
+BUILDDIR_MASTER_2=build_master2
 BUILDDIR_SLAVE_1=build_slave1
 BUILDDIR_SLAVE_2=build_slave2
 BUILDDIR_SLAVE_3=build_slave3
@@ -6,6 +7,7 @@ BUILDDIR_SLAVE_4=build_slave4
 
 # Target chips
 TARGET_MASTER=esp32s3
+TARGET_MASTER_2=esp32s3
 TARGET_SLAVE_1=esp32s3
 TARGET_SLAVE_2=esp32s3
 TARGET_SLAVE_3=esp32s3
