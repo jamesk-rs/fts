@@ -31,15 +31,8 @@ static const char *TAG = "fts_main";
 // Toggle every 1s (@2.5kHz)
 #define TOGGLE_LED_GPIO_DTR_CYCLES 2500
 
-#ifdef CONFIG_FTS_ROLE_SLAVE
-    // Waveshare ESP32-S3-LCD-1.47
-    #define LED_GPIO GPIO_NUM_41
-#elif defined(CONFIG_FTS_ROLE_MASTER)
-    // Seeed Studio XIAO ESP32S3 Yellow User Led
-    #define LED_GPIO GPIO_NUM_21
-#else
-    #error "CONFIG_FTS_ROLE_MASTER or CONFIG_FTS_ROLE_SLAVE must be defined"
-#endif
+// LED GPIO configured via sdkconfig (CONFIG_FTS_LED_GPIO)
+#define LED_GPIO CONFIG_FTS_LED_GPIO
 
 // GPIO pulse output (2.5kHz 20% duty cycle)
 #define TOGGLE_GPIO GPIO_NUM_7

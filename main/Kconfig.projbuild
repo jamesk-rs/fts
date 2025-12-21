@@ -22,6 +22,16 @@ menu "Time Synchronization Configuration"
             Enable synchronized GPIO toggling using MCPWM peripheral.
             Requires chip with MCPWM support (ESP32-S3, not ESP32-C3).
 
+    config FTS_LED_GPIO
+        int "LED GPIO Pin Number"
+        default 21
+        range 0 48
+        help
+            GPIO pin number for the status LED (blinks at 1Hz).
+            Common values:
+            - XIAO ESP32-S3: GPIO 21 (yellow user LED)
+            - Waveshare ESP32-S3-LCD-1.47: GPIO 41
+
     config FTS_CSV_OUTPUT
         bool "Enable CSV Debug Output"
         default n
