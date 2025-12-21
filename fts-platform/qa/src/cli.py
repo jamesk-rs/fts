@@ -284,6 +284,8 @@ def cmd_stream_mqtt(args):
     # Matching thresholds
     max_match_delay = 0.1 / args.pulse_freq * args.sample_rate  # 10% of period
     safety_buffer = 0.5 / args.pulse_freq * args.sample_rate    # 50% of period
+    # Expiration: edges waiting longer than this without a match are published as unmatched
+    expiration_samples = 2.0 / args.pulse_freq * args.sample_rate  # 2 periods
 
     chunk_count = 0
     start_time = time.time()
@@ -334,16 +336,35 @@ def cmd_stream_mqtt(args):
 
         chunk_count += 1
 
-        # Two-pointer merge: match edges from oldest to newest
+        # Two-pointer merge with expiration: match edges, expire stale ones
+        # Collect delays for this batch
+        batch_delays = []
+
+        # First, handle single-queue expiration (when one channel is down)
+        # This ensures we don't accumulate edges indefinitely
+        if queue_a and not queue_b:
+            # Only A has edges - expire old ones as unmatched
+            while queue_a and len(queue_a) > 1:
+                a = queue_a.popleft()
+                ch_a_ns = int(a / args.sample_rate * 1e9)
+                if publisher.publish_edge(channel_a_ns=ch_a_ns):
+                    edges_published += 1
+                    window_unmatched_a += 1
+
+        if queue_b and not queue_a:
+            # Only B has edges - expire old ones as unmatched
+            while queue_b and len(queue_b) > 1:
+                b = queue_b.popleft()
+                ch_b_ns = int(b / args.sample_rate * 1e9)
+                if publisher.publish_edge(channel_b_ns=ch_b_ns):
+                    edges_published += 1
+                    window_unmatched_b += 1
+
+        # Normal two-pointer merge when both queues have data
         if queue_a and queue_b:
-            # Find newest edge across both queues
             newest = max(queue_a[-1], queue_b[-1])
             safe_cutoff = newest - safety_buffer
 
-            # Collect delays for this batch
-            batch_delays = []
-
-            # Process edges that are old enough
             while queue_a and queue_b:
                 a = queue_a[0]
                 b = queue_b[0]
@@ -380,9 +401,9 @@ def cmd_stream_mqtt(args):
                         edges_published += 1
                         window_unmatched_b += 1
 
-            # Save delays for stats
-            if batch_delays:
-                all_delay_batches.append((time.time(), np.array(batch_delays)))
+        # Save delays for stats
+        if batch_delays:
+            all_delay_batches.append((time.time(), np.array(batch_delays)))
 
         # Report every 10 seconds
         now = time.time()
@@ -414,18 +435,19 @@ def cmd_stream_mqtt(args):
                 # Publish stats to MQTT with per-channel info
                 if publisher.publish_stats(stats.to_dict(), capture._overflow_count, channel_stats):
                     stats_published += 1
-                # time_stats += time.perf_counter() - t0
-                print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                      f"A={window_edges_a} B={window_edges_b} matched={len(combined_delays)} "
-                      f"unmatchedA={window_unmatched_a} unmatchedB={window_unmatched_b}, "
-                      f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns ovf={capture._overflow_count}")
-                # print(f"         timing: detect={time_detect:.2f}s, match={time_match:.2f}s, publish={time_publish:.2f}s, stats={time_stats:.2f}s")
+                print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples | "
+                      f"detected: A={window_edges_a} B={window_edges_b} | "
+                      f"queues: A={len(queue_a)} B={len(queue_b)} | "
+                      f"published: matched={window_matched} unmatchedA={window_unmatched_a} unmatchedB={window_unmatched_b} | "
+                      f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns | ovf={capture._overflow_count}")
             else:
                 # Publish stats even without delays to show channel health
                 publisher.publish_stats({}, capture._overflow_count, channel_stats)
-                print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                      f"A={window_edges_a} B={window_edges_b} delays={len(combined_delays)} "
-                      f"unmatchedA={window_unmatched_a} unmatchedB={window_unmatched_b}, ovf={capture._overflow_count}")
+                print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples | "
+                      f"detected: A={window_edges_a} B={window_edges_b} | "
+                      f"queues: A={len(queue_a)} B={len(queue_b)} | "
+                      f"published: matched={window_matched} unmatchedA={window_unmatched_a} unmatchedB={window_unmatched_b} | "
+                      f"delays={len(combined_delays)} | ovf={capture._overflow_count}")
 
             # Reset window counters
             window_edges_a = 0
