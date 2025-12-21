@@ -22,10 +22,18 @@ menu "Time Synchronization Configuration"
             Enable synchronized GPIO toggling using MCPWM peripheral.
             Requires chip with MCPWM support (ESP32-S3, not ESP32-C3).
 
+    config FTS_LED_ENABLED
+        bool "Enable status LED"
+        default y
+        help
+            Enable status LED blinking at 1Hz.
+            Disable for boards without a user LED (e.g., XIAO ESP32-C3).
+
     config FTS_LED_GPIO
         int "LED GPIO Pin Number"
         default 21
         range 0 48
+        depends on FTS_LED_ENABLED
         help
             GPIO pin number for the status LED (blinks at 1Hz).
             Common values:

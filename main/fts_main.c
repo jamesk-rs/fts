@@ -31,9 +31,6 @@ static const char *TAG = "fts_main";
 // Toggle every 1s (@2.5kHz)
 #define TOGGLE_LED_GPIO_DTR_CYCLES 2500
 
-// LED GPIO configured via sdkconfig (CONFIG_FTS_LED_GPIO)
-#define LED_GPIO CONFIG_FTS_LED_GPIO
-
 // GPIO pulse output (2.5kHz 20% duty cycle)
 #define TOGGLE_GPIO GPIO_NUM_7
 
@@ -56,14 +53,11 @@ static void mqtt_control_callback(int32_t period_correction_fp16,
  */
 static void IRAM_ATTR fts_callback(uint32_t master_cycle)
 {
-#ifdef LED_GPIO
+#ifdef CONFIG_FTS_LED_ENABLED
     // Blink at 1Hz, 20% on (active low), 80% off
     int led_phase = master_cycle % TOGGLE_LED_GPIO_DTR_CYCLES;
     int led_state = (led_phase < TOGGLE_LED_GPIO_DTR_CYCLES / 5) ? 0 : 1;
-    gpio_set_level(LED_GPIO, led_state);
-#else
-    // No LED hardware - log pulse to console. CAUTION: ISR context!
-    // ets_printf("P%lu\n", master_cycle);
+    gpio_set_level(CONFIG_FTS_LED_GPIO, led_state);
 #endif
 }
 
@@ -74,18 +68,18 @@ void app_main(void)
              BUILD_GIT_DIRTY ? "DIRTY" : "CLEAN",
              BUILD_GIT_HASH);
 
-#ifdef LED_GPIO
+#ifdef CONFIG_FTS_LED_ENABLED
     // Initialize LED
     gpio_config_t led_conf = {
-        .pin_bit_mask = (1ULL << LED_GPIO),
+        .pin_bit_mask = (1ULL << CONFIG_FTS_LED_GPIO),
         .mode = GPIO_MODE_OUTPUT,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&led_conf);
-    gpio_set_level(LED_GPIO, 1);  // LED off (active low)
-#endif // LED_GPIO
+    gpio_set_level(CONFIG_FTS_LED_GPIO, 1);  // LED off (active low)
+#endif
 
 #ifdef CONFIG_FTS_ROLE_SLAVE
     // ========== SLAVE MODE ==========
