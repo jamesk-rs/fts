@@ -11,6 +11,7 @@ datasources:
       organization: fts
       defaultBucket: fts
       tlsSkipVerify: true
+      timeout: 3600
     secureJsonData:
       token: fts-token-change-me
     isDefault: true
