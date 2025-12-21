@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
             NO_RESET=true
             shift
             ;;
-        master|slave1|slave2|slave3|slaves|all)
+        master|slave1|slave2|slave3|slave4|slaves|all)
             TARGETS+=("$1")
             shift
             ;;
@@ -67,8 +67,9 @@ while [[ $# -gt 0 ]]; do
             echo "    slave1      - Slave 1 only"
             echo "    slave2      - Slave 2 only"
             echo "    slave3      - Slave 3 only (not included in 'all' or 'slaves')"
-            echo "    slaves      - Slave 1 and 2 (not slave3)"
-            echo "    all         - Master + slave1 + slave2 (not slave3) [default]"
+            echo "    slave4      - Slave 4 only (ESP32-C3, not included in 'all' or 'slaves')"
+            echo "    slaves      - Slave 1 and 2 (not slave3/slave4)"
+            echo "    all         - Master + slave1 + slave2 (not slave3/slave4) [default]"
             echo "  If no actions specified, defaults to 'build'"
             echo "  If no targets specified, defaults to 'all'"
             exit 1
@@ -107,6 +108,7 @@ NEED_MASTER=false
 NEED_SLAVE1=false
 NEED_SLAVE2=false
 NEED_SLAVE3=false
+NEED_SLAVE4=false
 
 if has_target "all" || has_target "master"; then
     NEED_MASTER=true
@@ -121,28 +123,41 @@ fi
 if has_target "slave3"; then
     NEED_SLAVE3=true
 fi
+# slave4 (ESP32-C3) is NOT included in 'all' or 'slaves' - must be explicitly targeted
+if has_target "slave4"; then
+    NEED_SLAVE4=true
+fi
 
 # Function to clean/build a firmware type
 build_firmware() {
-    local fw_type=$1  # "master", "slave1", "slave2", or "slave3"
-    local build_dir sdkconfig_defaults
+    local fw_type=$1  # "master", "slave1", "slave2", "slave3", or "slave4"
+    local build_dir sdkconfig_defaults idf_target
 
     case "$fw_type" in
         master)
             build_dir="$BUILDDIR_MASTER"
             sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_master"
+            idf_target="$TARGET_MASTER"
             ;;
         slave1)
             build_dir="$BUILDDIR_SLAVE_1"
             sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave1"
+            idf_target="$TARGET_SLAVE_1"
             ;;
         slave2)
             build_dir="$BUILDDIR_SLAVE_2"
             sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave2"
+            idf_target="$TARGET_SLAVE_2"
             ;;
         slave3)
             build_dir="$BUILDDIR_SLAVE_3"
             sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave3"
+            idf_target="$TARGET_SLAVE_3"
+            ;;
+        slave4)
+            build_dir="$BUILDDIR_SLAVE_4"
+            sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave4"
+            idf_target="$TARGET_SLAVE_4"
             ;;
     esac
 
@@ -163,7 +178,7 @@ build_firmware() {
 
     if [[ "$DO_BUILD" == true ]]; then
         echo "Building ${fw_type} firmware..."
-        idf.py -B $build_dir -D SDKCONFIG_DEFAULTS="$sdkconfig_defaults" build
+        idf.py -B $build_dir -DIDF_TARGET=$idf_target -D SDKCONFIG_DEFAULTS="$sdkconfig_defaults" build
     fi
 }
 
@@ -194,6 +209,9 @@ if [[ "$DO_CLEAN" == true || "$DO_BUILD" == true ]]; then
     if [[ "$NEED_SLAVE3" == true ]]; then
         build_firmware "slave3"
     fi
+    if [[ "$NEED_SLAVE4" == true ]]; then
+        build_firmware "slave4"
+    fi
 fi
 
 # Phase 2: Flash to devices
@@ -214,6 +232,10 @@ if [[ "$DO_FLASH" == true ]]; then
     if has_target "slave3"; then
         flash_device "SLAVE 3" "$BUILDDIR_SLAVE_3" "$SERIAL_PORT_SLAVE_3"
     fi
+    # slave4 (ESP32-C3) is NOT included in 'all' or 'slaves' - must be explicitly targeted
+    if has_target "slave4"; then
+        flash_device "SLAVE 4" "$BUILDDIR_SLAVE_4" "$SERIAL_PORT_SLAVE_4"
+    fi
 fi
 
 # Phase 3: Monitor
@@ -224,6 +246,7 @@ if [[ "$DO_MONITOR" == true ]]; then
     MON_SLAVE1=false
     MON_SLAVE2=false
     MON_SLAVE3=false
+    MON_SLAVE4=false
 
     if has_target "all"; then
         MON_MASTER=true; MON_SLAVE1=true; MON_SLAVE2=true
@@ -238,6 +261,7 @@ if [[ "$DO_MONITOR" == true ]]; then
             has_target "slave2" && MON_SLAVE2=true
         fi
         has_target "slave3" && MON_SLAVE3=true
+        has_target "slave4" && MON_SLAVE4=true
     fi
 
     # Count monitors needed
@@ -246,6 +270,7 @@ if [[ "$DO_MONITOR" == true ]]; then
     $MON_SLAVE1 && ((MON_COUNT++)) || true
     $MON_SLAVE2 && ((MON_COUNT++)) || true
     $MON_SLAVE3 && ((MON_COUNT++)) || true
+    $MON_SLAVE4 && ((MON_COUNT++)) || true
 
     # Create output directory if specified
     if [[ -n "$OUTPUT_DIR" ]]; then
@@ -286,6 +311,12 @@ if [[ "$DO_MONITOR" == true ]]; then
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave3.log"
             stdbuf -oL idf.py -B $BUILDDIR_SLAVE_3 -p $SERIAL_PORT_SLAVE_3 monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
+        elif $MON_SLAVE4; then
+            echo "Monitoring SLAVE 4..."
+            . $ESP_IDF_EXPORT > /dev/null 2>&1
+            TS_ARGS=""
+            [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave4.log"
+            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_4 -p $SERIAL_PORT_SLAVE_4 monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
         fi
     else
         # Multiple monitors - use tmux
@@ -341,6 +372,18 @@ if [[ "$DO_MONITOR" == true ]]; then
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave3.log'"
             tmux send-keys -t fts_monitor \
                 "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_3 -p $SERIAL_PORT_SLAVE_3 monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
+        fi
+
+        if $MON_SLAVE4; then
+            if $FIRST_PANE; then
+                FIRST_PANE=false
+            else
+                tmux split-window -t fts_monitor -v
+            fi
+            TS_ARGS=""
+            [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave4.log'"
+            tmux send-keys -t fts_monitor \
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_4 -p $SERIAL_PORT_SLAVE_4 monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
         fi
 
         # Balance panes and attach
