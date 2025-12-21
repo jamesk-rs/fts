@@ -271,8 +271,14 @@ static bool s_catch_mac_clock_transition_inst(dtr_instance_t *inst,
     timer_base_ticks_pre = inst->timer_base_ticks;
 
     // Tight loop to catch MAC transition
+    // Timeout after 5000 iterations to avoid triggering interrupt WDT on slower chips (C3)
     do {
         iterations++;
+        if (iterations > 5000) {
+            // Timeout - exit critical section and signal retry
+            portEXIT_CRITICAL(&inst->spinlock);
+            return false;
+        }
         timer_before = inst->ops->read_counter(inst);
         mac_clock_us_1 = esp_wifi_internal_get_mac_clock_time();
         mac_clock_us_2 = esp_wifi_internal_get_mac_clock_time();
@@ -351,7 +357,8 @@ static int64_t s_measure_mac_clock_timer_start_offset_inst(dtr_instance_t *inst,
         s_refine_mac_clock_timer_start_offset(&offset_ticks_min, &offset_ticks_max,
                                               timer_abs_before, mac_clock_transition_us, timer_abs_after);
 
-        if ((samples & 0xFFFF) == 0) vTaskDelay(1);
+        // Yield periodically to avoid task WDT (more frequently on single-core chips like C3)
+        if ((samples & 0x3FF) == 0) vTaskDelay(1);
     }
 
     int64_t offset_ticks = (offset_ticks_min + offset_ticks_max) / 2;
