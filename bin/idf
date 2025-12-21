@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
             NO_RESET=true
             shift
             ;;
-        master|slave1|slave2|slaves|all)
+        master|slave1|slave2|slave3|slaves|all)
             TARGETS+=("$1")
             shift
             ;;
@@ -60,14 +60,15 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [clean] [build] [flash] [monitor] [-o DATADIR] [--no-reset] [targets...]"
             echo "  Actions: clean, build, flash, monitor (can specify multiple)"
             echo "  Options:"
-            echo "    -o DATADIR  - Log monitor output to DATADIR/{slave1,slave2}.log"
+            echo "    -o DATADIR  - Log monitor output to DATADIR/{slave1,slave2,slave3}.log"
             echo "    --no-reset  - Don't reset chip when starting monitor"
             echo "  Targets (can specify multiple):"
             echo "    master      - Master device only"
             echo "    slave1      - Slave 1 only"
             echo "    slave2      - Slave 2 only"
-            echo "    slaves      - All slave devices"
-            echo "    all         - All devices (master + all slaves) [default]"
+            echo "    slave3      - Slave 3 only (not included in 'all' or 'slaves')"
+            echo "    slaves      - Slave 1 and 2 (not slave3)"
+            echo "    all         - Master + slave1 + slave2 (not slave3) [default]"
             echo "  If no actions specified, defaults to 'build'"
             echo "  If no targets specified, defaults to 'all'"
             exit 1
@@ -105,6 +106,7 @@ fi
 NEED_MASTER=false
 NEED_SLAVE1=false
 NEED_SLAVE2=false
+NEED_SLAVE3=false
 
 if has_target "all" || has_target "master"; then
     NEED_MASTER=true
@@ -115,10 +117,14 @@ fi
 if has_target "all" || has_target "slaves" || has_target "slave2"; then
     NEED_SLAVE2=true
 fi
+# slave3 is NOT included in 'all' or 'slaves' - must be explicitly targeted
+if has_target "slave3"; then
+    NEED_SLAVE3=true
+fi
 
 # Function to clean/build a firmware type
 build_firmware() {
-    local fw_type=$1  # "master", "slave1", or "slave2"
+    local fw_type=$1  # "master", "slave1", "slave2", or "slave3"
     local build_dir sdkconfig_defaults
 
     case "$fw_type" in
@@ -133,6 +139,10 @@ build_firmware() {
         slave2)
             build_dir="$BUILDDIR_SLAVE_2"
             sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave2"
+            ;;
+        slave3)
+            build_dir="$BUILDDIR_SLAVE_3"
+            sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave3"
             ;;
     esac
 
@@ -181,6 +191,9 @@ if [[ "$DO_CLEAN" == true || "$DO_BUILD" == true ]]; then
     if [[ "$NEED_SLAVE2" == true ]]; then
         build_firmware "slave2"
     fi
+    if [[ "$NEED_SLAVE3" == true ]]; then
+        build_firmware "slave3"
+    fi
 fi
 
 # Phase 2: Flash to devices
@@ -197,6 +210,10 @@ if [[ "$DO_FLASH" == true ]]; then
     if has_target "all" || has_target "slaves" || has_target "slave2"; then
         flash_device "SLAVE 2" "$BUILDDIR_SLAVE_2" "$SERIAL_PORT_SLAVE_2"
     fi
+    # slave3 is NOT included in 'all' or 'slaves' - must be explicitly targeted
+    if has_target "slave3"; then
+        flash_device "SLAVE 3" "$BUILDDIR_SLAVE_3" "$SERIAL_PORT_SLAVE_3"
+    fi
 fi
 
 # Phase 3: Monitor
@@ -206,17 +223,21 @@ if [[ "$DO_MONITOR" == true ]]; then
     MON_MASTER=false
     MON_SLAVE1=false
     MON_SLAVE2=false
+    MON_SLAVE3=false
 
     if has_target "all"; then
         MON_MASTER=true; MON_SLAVE1=true; MON_SLAVE2=true
+        # slave3 is NOT included in 'all'
     else
         has_target "master" && MON_MASTER=true
         if has_target "slaves"; then
             MON_SLAVE1=true; MON_SLAVE2=true
+            # slave3 is NOT included in 'slaves'
         else
             has_target "slave1" && MON_SLAVE1=true
             has_target "slave2" && MON_SLAVE2=true
         fi
+        has_target "slave3" && MON_SLAVE3=true
     fi
 
     # Count monitors needed
@@ -224,6 +245,7 @@ if [[ "$DO_MONITOR" == true ]]; then
     $MON_MASTER && ((MON_COUNT++)) || true
     $MON_SLAVE1 && ((MON_COUNT++)) || true
     $MON_SLAVE2 && ((MON_COUNT++)) || true
+    $MON_SLAVE3 && ((MON_COUNT++)) || true
 
     # Create output directory if specified
     if [[ -n "$OUTPUT_DIR" ]]; then
@@ -258,6 +280,12 @@ if [[ "$DO_MONITOR" == true ]]; then
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave2.log"
             stdbuf -oL idf.py -B $BUILDDIR_SLAVE_2 -p $SERIAL_PORT_SLAVE_2 monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
+        elif $MON_SLAVE3; then
+            echo "Monitoring SLAVE 3..."
+            . $ESP_IDF_EXPORT > /dev/null 2>&1
+            TS_ARGS=""
+            [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave3.log"
+            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_3 -p $SERIAL_PORT_SLAVE_3 monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
         fi
     else
         # Multiple monitors - use tmux
@@ -301,6 +329,18 @@ if [[ "$DO_MONITOR" == true ]]; then
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave2.log'"
             tmux send-keys -t fts_monitor \
                 "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_2 -p $SERIAL_PORT_SLAVE_2 monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
+        fi
+
+        if $MON_SLAVE3; then
+            if $FIRST_PANE; then
+                FIRST_PANE=false
+            else
+                tmux split-window -t fts_monitor -v
+            fi
+            TS_ARGS=""
+            [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave3.log'"
+            tmux send-keys -t fts_monitor \
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_3 -p $SERIAL_PORT_SLAVE_3 monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
         fi
 
         # Balance panes and attach
