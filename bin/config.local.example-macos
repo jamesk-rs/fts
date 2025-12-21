@@ -6,6 +6,10 @@ WIFI_SSID="your_wifi_ssid"
 WIFI_PASSWORD="your_wifi_password"
 
 # --- map the dev boards to roles ---
+# Use `ls /dev/cu.usbmodem*` to find your device paths
 SERIAL_PORT_MASTER=/dev/cu.usbmodem11101
+SERIAL_PORT_MASTER_2=/dev/cu.usbmodem11102
 SERIAL_PORT_SLAVE_1=/dev/cu.usbmodem11201
 SERIAL_PORT_SLAVE_2=/dev/cu.usbmodem11301
+SERIAL_PORT_SLAVE_3=/dev/cu.usbmodem11401
+SERIAL_PORT_SLAVE_4=/dev/cu.usbmodem11501
