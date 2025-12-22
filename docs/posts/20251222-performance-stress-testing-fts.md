@@ -60,23 +60,23 @@ Unfortunately FTM (at least Espressif's implementation of FTM) was not designed 
 * Recent ESP IDF v5.5.1 give access to local MAC clock, but only with **1us resolution**,
 * The timestamps in FTM packets have a weird **undocumented wrap-around pattern**.
 
-The responder-side timers (T1 and T4) are particularly problematic: it wraps in two ways - naturally due to its 48 bits capacity and additionally when responder's microseconds MAC clock overflows.
+The responder-side timers (T1 and T4) are particularly problematic: it wraps in two ways - naturally, due to its 48 bits length, and additionally when responder's microseconds MAC clock overflows.
 ![](assets/images/20251222-ftm-wraps.png)
 
-Reverse engineering behavior of FTM timers turned out to be an exciting challenge. And figuring out how to align edges of a 1us-resolution MAC clock to a 25ns-resolution MCPWM timer -- even more so. Detailed description of the approach I have ended up with is out of scope of this article. If there is enough interest I can document it too (in the mean time feel free to grep for 'clock_unwrap' and 's_measure_mac_clock_timer_start_offset' in the source code).
+Reverse engineering the behavior of FTM timers turned out to be an exciting challenge. And figuring out how to align edges of a 1us-resolution MAC clock to a 25ns-resolution MCPWM timer -- even more so. Detailed description of the approach I have ended up with is out of scope of this article. If there is enough interest I can document it too (in the mean time feel free to grep for 'clock_unwrap' and 's_measure_mac_clock_timer_start_offset' in the source code).
 ## The Architecture of the Test Setup
 
-The new test setup is assembled on two pieces of plastic.
+The new test setup is assembled on two plastic panels.
 
-The left panel is mobile, it hosts the master and can be moved around. Green triangle on the left is a directional antenna.
+The left panel is mobile, it hosts the master and can be moved around. The green triangle on the left is a directional antenna.
 
-The slaves are mounted on the right panel which stays on the table. The slaves know nothing about each other, independently sync to the master, and send 2kHz pulses to a GPIO pin. The GPIOs are connected (through 100R resistors and green/black 50R coax cables) to the inputs of a lab-grade SDR - Ettus N210 SDRs with Basic RX daughterboard and a GPS-disciplined oscillator.
+The slaves are mounted on the right panel which stays on the table. The slaves know nothing about each other. They independently sync to the master, and send out square 2kHz pulses on a GPIO pin. The GPIOs are connected (through 100R resistors, via green/black 50R coax cables) to the inputs of a lab-grade SDR - Ettus N210 SDRs with Basic RX daughterboard and a GPS-disciplined oscillator.
 ![](assets/images/20251222-modular-setup.png)
 
 The architecture of the FTS library itself is described in details in the FTS v0.1 slides, I will not repeat it here, just add a slide with an overview:
 ![FTS Architecture](assets/images/20251222-fts-architecture.png)
 
-For the purposes of testing, it is important to note that the disciplined timer (we use MCPWM module of ESP32 S3) will be configured to send square 2kHz pulses on GPIO. The pulse generation is done in hardware, which should guarantees very low (~10ns) jitter.
+For the purposes of testing, it is important to note that we use MCPWM module of ESP32 S3 to implement the disciplined timer. This way the pulse generation is done in hardware, which should guarantees very low (~10ns) jitter.
 
 The signals are sampled at 10 MHz. Pulse edge is defined (interpolated) as a moment the voltage crosses 0.4V threshold.
 
@@ -90,11 +90,21 @@ On the second slide we were measuring two signals with deliberate -20ns phase sh
 The standard deviation is 16ns (vs 20ns expected) and the average is -8.9ns (vs -20ns). The discrepancy is a bit over 10ns, but still close enough. Please see the FTS QA presentation and video for more tests and details.
 ## Performance and Stress Test Scenarios
 
-Desktop setup
-Look into telemetry
-Try running from battery
-Reboot the devices, multiple times
-Add distance
-No line of sight
-Move away until it starts to fail
-Add walls (+2 floors)
+I hope the introduction above gives you enough background information about FTS and FTM and we can look into behavior of our test setup in different situations.
+
+We will start with a **nice and clean desktop setup** first, with devices sitting next to each other. We will look at FTM logs (ESP32 serial console) and the telemetry (Grafana dashboards) and observe how:
+* the slaves receive FTM data and use it to build **Clock Relationship Model**,
+* handle the **initial timer syncronization**,
+* handle the **subsequent period corrections**.
+
+Next, we will try to mess with the desktop setup and look at
+* the **impact of power supply voltage fluctuations** (by switching between USB and battery power supply),
+* what happens when a **slave reboots**,
+* what happens when the **master disappears and appears again**.
+
+Next, we will **move the master away from the slaves**:
+* breaking line-of-sight (multipath propagation),
+* adding distance and walls (signal attenuation, noise).
+We will move the master away until there are too few FTM messages to maintain a valid CRM.
+
+And, finally, we will try to break FTS by **flooding the WiFi channel** used by FTM.
