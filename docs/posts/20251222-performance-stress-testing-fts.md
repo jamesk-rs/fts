@@ -12,7 +12,7 @@ Originally, the content of this article was meant to be Part III of FTS QA prese
 
 I will be publishing a draft of FTS QA presentation slides videos, my apologies for the unpolished content:
 * Technical design [FTS v0.1 slides](https://github.com/abbbe/fts/blob/main/docs/fts-presa-20251203.pdf) and a [Demo](https://youtu.be/4iP3hrxq6Ro?list=PLaFdGOpzQDVKKY2mbfAGeHgCm-Kj2fClG),
-* Unfinished [FTS QA slides](https://github.com/abbbe/fts/blob/main/docs/fts-qa-presa-draft-20251222.pdf) (demo4 and part III are replaced by this article) and videos: [Intro](), [Part I](), [Part II](), [Part II's Demos]().
+* [FTS QA slides](https://github.com/abbbe/fts/blob/main/docs/fts-qa-presa-draft-20251222.pdf) (unfinished, this article covers the missing parts) and videos: [Intro](https://youtu.be/ig4JJSmVero), [Part I](https://youtu.be/heT7LdVEfXo), [Part II](https://youtu.be/ejwtdzo_Ydw), [Part II's Demos](https://youtu.be/VCuajtiGWCA).
 ### FTS Goals
 
 In the scope of this project, when speaking of time synchronization, I mean two things:
