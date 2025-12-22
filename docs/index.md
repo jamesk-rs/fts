@@ -8,4 +8,4 @@ FTS delivers two main components:
 
 This repo contains full source code and README.md explaning how to build and test FTS.
 
-Along with the very first release I have published **full technical implementation details** in https://github.com/abbbe/fts/blob/main/docs/fts-presa-20251203.pdf and a small **demo** on Reddit https://www.reddit.com/r/embedded/comments/1pbp0az/.
+Along with the very first release I have published [full technical implementation details](https://github.com/abbbe/fts/blob/main/docs/fts-presa-20251203.pdf) in  and a small [demo on Reddit](https://www.reddit.com/r/embedded/comments/1pbp0az/).
