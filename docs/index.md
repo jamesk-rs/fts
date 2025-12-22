@@ -12,9 +12,9 @@ Along with the very first release I have published [full technical implementatio
 
 Since then I have prepared a new modular test rig, based on a lab grade Software Defined Radios and TIG stack, to collect and visualize telemetry. Couple images, just to give you an idea:
 
-![Modular Test Rig with SDRs and TIG](20251222-teaser-setup.png)
+![Modular Test Rig with SDRs and TIG](assets/images/20251222-teaser-setup.png)
 
-![Sample Grafana Dashboard Screen](20251222-teaser-tig.png)
+![Sample Grafana Dashboard Screen](assets/images/20251222-teaser-tig.png)
 
 I am using this new setup to see how FTS behaves when it is **pushed to the limits**:
 * + distance and walls: no line of sight, signal attenuation, noise, packet loss and jitter,
