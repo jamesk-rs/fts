@@ -28,7 +28,7 @@ The performance of FTS will be judged by measuring relative delays of pulses gen
 In the new setup pulses are digitized by a lab-grade SDR (Software Defined Radio, basically a high quality ADC with Ethernet output). The picture below show 3x ESP32 S3 chips on the bottom, SDR on the right top:
 ![](assets/images/20251222-modular-setup.png)
 
-Shuttle PC (top left) runs a custom Python script which receives SDR data stream and feeds it into TIG stack (Mosquito QTT, Telegraf, InfluxDB, Grafana) over MQTT. Custom Grafana dashboards allow real-time data visualization and long term statistical data analysis.
+Shuttle PC (top left) runs a custom Python script which receives SDR data stream and feeds it into TIG stack (Mosquito MQTT, Telegraf, InfluxDB, Grafana). Custom Grafana dashboards allow real-time data visualization and long term statistical data analysis.
 
 Below is a snapshot of Grafana dashboard showing distribution of relative delays over one hour:
 * average - 14ns,
@@ -41,16 +41,17 @@ Below is a snapshot of Grafana dashboard showing distribution of relative delays
 
 Fine-grained time synchronization between commodity controllers and SoC is notoriously difficult. Most devices lack hardware time-stamping capabilities, leaving software time-stamping as the only source of timing information. This alone introduces tens of microseconds uncertainty.
 
-Should the oscillator be stable, this uncertainty could be averaged out using clever math statistical methods, but crystal oscillators in inexpensive devices drift wildly. During warmup, their frequency can drift wildly (5 PPMs change over 5 minutes):
+Should the oscillator be stable, this uncertainty could be averaged out using clever math statistical methods, but crystal oscillators in inexpensive devices drift wildly. During warmup, their frequency drifts wildly (5 PPMs change over 5 minutes):
 ![](assets/images/20251222-crm-clock-offset-warmup.png)
 
-And even after 8 hours of operation it still jumps around enough to  make sub-microsecond time synchronization difficult:
+And even after 8 hours of operation it still jumps within 0.5 PPM, enough to  make sub-microsecond time synchronization difficult:
 ![](assets/images/20251222-crm-clock-offset-warmedup.png)
 ### Repurposing FTM for Time Sync
 
-Wifi FTM protocol is designed for ranging. It allows FTM initiator and FTM responder devices exchange a series of packets, carrying 4 timestamps taken off their local high-resolution (picoseconds) oscillator, called **MAC clock**.
+Wifi FTM protocol is designed for ranging. It allows FTM initiator and FTM responder devices exchange a series of packets, carrying high-resolution (picoseconds) timestamps taken from their local oscillators (ESP32 it is called **MAC clock**).
 ![](assets/images/20251222-ftm-packets-flow.png)
-(Source: https://www.winlab.rutgers.edu/~gruteser/projects/ftm/index.htm).
+
+(The illustration above is taken [this article](https://www.winlab.rutgers.edu/~gruteser/projects/ftm/index.htm)).
 
 By subtracting these timestamps the FTM initiator can calculate the time of flight and the distance to the responder.
 
