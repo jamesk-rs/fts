@@ -102,7 +102,7 @@ The standard deviation is 16ns (vs 20ns expected) and the average is -8.9ns (vs 
 
 ## Performance and Stress Test Scenarios
 
-I hope the introduction above helps you interpret the behavior of FTS test setup as we go through different test scenarios.
+The introduction above should give you enough background info to interpret the behavior of the FTS test setup as we go through different test scenarios.
 
 We will start with a **nice and clean desktop setup** first, with devices sitting next to each other. We will look at FTM logs (ESP32 serial console) and the telemetry (Grafana dashboards) and observe how:
 * the slaves receive **FTM data** and use it to build **Clock Relationship Model**,
@@ -117,7 +117,8 @@ Next, we will try to mess with the desktop setup and look at
 Next, we will **move the master away from the slaves**:
 * breaking line-of-sight (multipath propagation),
 * adding distance and walls (signal attenuation, noise).
-We will move the master away until there are too few FTM messages to maintain a valid CRM.
+
+We will be moving the master away until there are too few FTM messages to maintain a valid CRM.
 
 And, finally, we will try to break FTS by **flooding the WiFi channel** used by FTM.
 
