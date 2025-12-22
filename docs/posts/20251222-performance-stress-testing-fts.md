@@ -7,6 +7,11 @@ has_toc: true
 # Performance and Stress Testing FTS (ESP32 Fine Time Sync) Library
 
 ![](assets/images/20251222-teaser.png)
+
+## Table of Contents
+- TOC
+{:toc}
+
 ## Introduction
 
 Originally, the content of this article was meant to be Part III of FTS QA presentation. A few days ago I have realized I will not have time to finish that presentation in full, for number of reasons. But I felt it would be a pity to bury this project, so I have decided to turn the last part of that FTS QA presentation into an article, to try and hopefully prove that FTS actually works and invite other people use it in their projects.
