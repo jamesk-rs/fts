@@ -10,8 +10,14 @@ Full source code and README.md with **build instructions** are in [Github repo](
 
 Along with the very first release I have published [full technical implementation details](https://github.com/abbbe/fts/blob/main/docs/fts-presa-20251203.pdf) in  and a small [demo on Reddit](https://www.reddit.com/r/embedded/comments/1pbp0az/).
 
-Since then I have prepared a new modular test rig, based on a lab grade Software Defined Radios and TIG stack, to collect and visualize telemetry. I am using this new setup to see how FTS behaves when it os pushed to the limits:
+Since then I have prepared a new modular test rig, based on a lab grade Software Defined Radios and TIG stack, to collect and visualize telemetry. Couple images, just to give you an idea:
+
+![Modular Test Rig with SDRs and TIG](testrig-016-shuttle.png)
+
+![](20251222-teaser-tig.png)
+
+I am using this new setup to see how FTS behaves when it is **pushed to the limits**:
 * + distance and walls: no line of sight, signal attenuation, noise, packet loss and jitter,
 * + saturate wifi channel: even more FTM packet loss.
 
-I will be posting the results shortly.
+I will be posting more details shortly.
