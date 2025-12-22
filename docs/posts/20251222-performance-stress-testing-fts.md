@@ -16,9 +16,9 @@ has_toc: true
 
 Originally, the content of this article was meant to be Part III of FTS QA presentation. A few days ago I have realized I will not have time to finish that presentation in full, for number of reasons. But I felt it would be a pity to bury this project, so I have decided to turn the last part of that FTS QA presentation into an article, to try and hopefully prove that FTS actually works and invite other people use it in their projects.
 
-I will be publishing a draft of FTS QA presentation slides videos, my apologies for the unpolished content:
+I will be publishing a draft of FTS QA presentation slides and videos, my apologies for the unpolished content:
 * Technical design [FTS v0.1 slides](https://github.com/abbbe/fts/blob/main/docs/fts-presa-20251203.pdf) and the [Demo](https://youtu.be/4iP3hrxq6Ro?list=PLaFdGOpzQDVKKY2mbfAGeHgCm-Kj2fClG),
-* [FTS QA slides](https://github.com/abbbe/fts/blob/main/docs/fts-qa-presa-draft-20251222.pdf) (unfinished, this article covers the missing parts) and videos: [Intro](https://youtu.be/ig4JJSmVero), [Part I](https://youtu.be/heT7LdVEfXo), [Part II](https://youtu.be/ejwtdzo_Ydw), [Part II's Demos](https://youtu.be/VCuajtiGWCA).
+* [FTS QA slides](https://github.com/abbbe/fts/blob/main/docs/fts-qa-presa-draft-20251222.pdf) (unfinished, this article covers the missing parts) and videos: [Intro](https://youtu.be/ig4JJSmVero), [Part I - Intro & Demos](https://youtu.be/heT7LdVEfXo), [Part II - Intro](https://youtu.be/ejwtdzo_Ydw), [Part II - Demos](https://youtu.be/VCuajtiGWCA).
 
 ### FTS Goals
 
