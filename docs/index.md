@@ -17,7 +17,7 @@ Since then I have prepared a new modular test rig, based on a lab grade Software
 ![Sample Grafana Dashboard Screen](assets/images/20251222-teaser-tig.png)
 
 I am using this new setup to see how FTS behaves when it is **pushed to the limits**:
-* + distance and walls: no line of sight, signal attenuation, noise, packet loss and jitter,
-* + saturate wifi channel: even more FTM packet loss.
+* distance and walls: no line of sight, signal attenuation, noise, packet loss and jitter,
+* saturate wifi channel: even more FTM packet loss.
 
 I will be posting more details shortly.
