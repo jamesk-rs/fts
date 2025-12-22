@@ -4,7 +4,7 @@ date: 2025-12-22
 nav_order: 1
 has_toc: true
 ---
-# Performance and Stress Testing FTS (ESP32 Fine Time Sync) Library
+# Performance and Stress Testing ESP FTS (Fine Time Sync) Library
 
 ![](assets/images/20251222-teaser.png)
 
