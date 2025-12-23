@@ -1,3 +1,7 @@
+---
+nav_exclude: true
+---
+
 on rpi
 ```
 sudo modprobe usbip-host
