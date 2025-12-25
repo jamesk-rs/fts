@@ -29,41 +29,29 @@ echo "Working directory: $FTS_PLATFORM_DIR"
 
 # Check if .env exists, create from example if not
 if [ ! -f .env ]; then
-    if [ -f .env.example ]; then
-        echo "Creating .env from .env.example..."
-        cp .env.example .env
-
-        # Generate secure token and password
-        GENERATED_TOKEN=$(openssl rand -hex 32)
-        GENERATED_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
-
-        sed -i "s/CHANGE_ME_generate_with_openssl_rand_hex_32/$GENERATED_TOKEN/g" .env
-        sed -i "s/CHANGE_ME_secure_password/$GENERATED_PASS/g" .env
-
-        echo ""
-        echo "Generated credentials (save these!):"
-        echo "  InfluxDB Token: $GENERATED_TOKEN"
-        echo "  Admin Password: $GENERATED_PASS"
-        echo ""
-    elif [ -f deploy/.env.example ]; then
-        echo "Creating .env from deploy/.env.example..."
-        cp deploy/.env.example .env
-
-        GENERATED_TOKEN=$(openssl rand -hex 32)
-        GENERATED_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
-
-        sed -i "s/CHANGE_ME_generate_with_openssl_rand_hex_32/$GENERATED_TOKEN/g" .env
-        sed -i "s/CHANGE_ME_secure_password/$GENERATED_PASS/g" .env
-
-        echo ""
-        echo "Generated credentials (save these!):"
-        echo "  InfluxDB Token: $GENERATED_TOKEN"
-        echo "  Admin Password: $GENERATED_PASS"
-        echo ""
-    else
+    if [ ! -f .env.example ]; then
         echo "Error: No .env.example found. Please create .env manually."
         exit 1
     fi
+
+    echo "Creating .env from .env.example..."
+    cp .env.example .env
+
+    # Generate secure credentials
+    GENERATED_TOKEN=$(openssl rand -hex 32)
+    GENERATED_INFLUX_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
+    GENERATED_GRAFANA_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
+
+    sed -i "s/CHANGE_ME_generate_with_openssl_rand_hex_32/$GENERATED_TOKEN/g" .env
+    sed -i "s/CHANGE_ME_secure_password/$GENERATED_INFLUX_PASS/g" .env
+    sed -i "s/CHANGE_ME_grafana_password/$GENERATED_GRAFANA_PASS/g" .env
+
+    echo ""
+    echo "Generated credentials (save these!):"
+    echo "  InfluxDB Token: $GENERATED_TOKEN"
+    echo "  InfluxDB Password: $GENERATED_INFLUX_PASS"
+    echo "  Grafana Password: $GENERATED_GRAFANA_PASS"
+    echo ""
 fi
 
 # Source environment
@@ -79,6 +67,11 @@ fi
 
 if [ -z "$INFLUX_ADMIN_PASSWORD" ] || [ "$INFLUX_ADMIN_PASSWORD" = "CHANGE_ME_secure_password" ]; then
     echo "Error: Please set INFLUX_ADMIN_PASSWORD in .env"
+    exit 1
+fi
+
+if [ -z "$GRAFANA_ADMIN_PASSWORD" ] || [ "$GRAFANA_ADMIN_PASSWORD" = "CHANGE_ME_grafana_password" ]; then
+    echo "Error: Please set GRAFANA_ADMIN_PASSWORD in .env"
     exit 1
 fi
 
