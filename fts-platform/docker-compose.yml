@@ -60,7 +60,7 @@ services:
       - MQTT_USERNAME=${MQTT_USERNAME:?Create .env from .env.example}
       - MQTT_PASSWORD=${MQTT_PASSWORD:?Create .env from .env.example}
     group_add:
-      - "${DOCKER_GID:?DOCKER_GID env var is missing}"  # GID of docker group on host (run: stat -c '%g' /var/run/docker.sock)
+      - "${DOCKER_GID}"
     depends_on:
       mosquitto:
         condition: service_healthy
