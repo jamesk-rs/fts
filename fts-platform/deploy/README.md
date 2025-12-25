@@ -1,6 +1,9 @@
 # FTS Platform - Proxmox LXC Deployment
 
-Deploy the FTS TIG stack (InfluxDB, Grafana, Mosquitto, Telegraf) to a Proxmox LXC container.
+Deploy the FTS TIG stack (InfluxDB, Grafana, Mosquitto, Telegraf).
+* 01-create-lxc.sh - Run on ProxMox host (if you want to deploy in LXC)
+* 02-install-docker.sh - Run inside the container (LXS or whatever other container or VM you choose)
+* 03-deploy-stack.sh - Run inside the container, it will create .env unless it exists already
 
 ## Prerequisites
 
@@ -14,8 +17,8 @@ Deploy the FTS TIG stack (InfluxDB, Grafana, Mosquitto, Telegraf) to a Proxmox L
 # 1. Create LXC container (run on Proxmox host)
 scp fts-platform/deploy/01-create-lxc.sh root@<proxmox-host>:/root/
 ssh root@<proxmox-host>
-chmod +x /root/01-create-lxc.sh
-/root/01-create-lxc.sh
+chmod +x /root/01-crea01-create-lxc.shte-lxc.sh
+/root/
 
 # 2. Install Docker inside LXC (run on Proxmox host)
 scp fts-platform/deploy/02-install-docker.sh root@<proxmox-host>:/root/
@@ -55,14 +58,49 @@ Environment variables:
 | MQTT | 1883 | mqtt://<lxc-ip>:1883 |
 | MQTT WS | 9001 | ws://<lxc-ip>:9001 |
 
-## Optional Profiles
+## Deployment Profiles
+
+Three deployment modes are available:
+
+| Profile | Services | Use Case |
+|---------|----------|----------|
+| `local` | Mosquitto + TIG + stream-mqtt | Full local stack (Shuttle PC) |
+| `split-local` | Mosquitto + stream-mqtt | Lab side of split setup |
+| `split-cloud` | Mosquitto + TIG | Cloud side of split setup |
 
 ```bash
-# Enable RL Engine
-docker compose --profile rl up -d
+# Full local deployment (everything on one machine)
+docker compose --profile local up -d
 
-# Enable UHD/SDR streaming
-docker compose --profile uhd up -d
+# Split setup - on Lab/Shuttle (with MQTT bridge to cloud)
+docker compose --profile split-local up -d
+
+# Split setup - on Cloud LXC
+docker compose --profile split-cloud up -d
+
+# Add RL engine (works with local or split-cloud)
+docker compose --profile local --profile rl up -d
+```
+
+### Split Setup Architecture
+
+```
+LAB (Shuttle)                          CLOUD (LXC)
+┌──────────────────┐                   ┌──────────────────┐
+│ ESP32 → Mosquitto ════════════════►  │ Mosquitto        │
+│ SDR → stream-mqtt│   MQTT bridge     │   ↓              │
+│                  │                   │ Telegraf         │
+│                  │                   │   ↓              │
+│                  │                   │ InfluxDB→Grafana │
+└──────────────────┘                   └──────────────────┘
+```
+
+For split setup, add bridge config to Lab's `mosquitto.conf`:
+```conf
+connection fts-cloud
+address <cloud-ip>:1883
+topic fts/# out 1
+cleansession false
 ```
 
 ## ESP32 Configuration

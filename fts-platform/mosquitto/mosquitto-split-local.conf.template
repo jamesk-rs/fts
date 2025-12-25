@@ -1,0 +1,37 @@
+# Mosquitto Configuration - Split Local Profile
+# Unauthenticated local access + authenticated bridge to cloud
+# Note: This is a template - deploy script substitutes variables
+
+listener 1883
+protocol mqtt
+
+listener 9001
+protocol websockets
+
+# Local access is unauthenticated (ESP32, stream-mqtt)
+allow_anonymous true
+
+persistence true
+persistence_location /mosquitto/data/
+
+log_dest file /mosquitto/log/mosquitto.log
+log_dest stdout
+log_type error
+log_type warning
+log_type notice
+log_type information
+
+max_keepalive 120
+
+# Bridge to cloud
+connection fts-cloud
+address ${MQTT_BRIDGE_HOST}:${MQTT_BRIDGE_PORT}
+topic fts/# out 1
+cleansession false
+notifications false
+restart_timeout 10
+try_private true
+
+# Bridge authentication
+remote_username ${MQTT_BRIDGE_USERNAME}
+remote_password ${MQTT_BRIDGE_PASSWORD}

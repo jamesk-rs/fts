@@ -1,8 +1,22 @@
 #!/bin/bash
 # Deploy FTS Platform stack
-# Run this script from the fts-platform directory (parent of deploy/)
+# Usage: ./03-deploy-stack.sh [profile]
+#   Profiles: local, split-local, split-cloud (default)
 
 set -e
+
+# Parse profile argument
+PROFILE="${1:-split-cloud}"
+
+case "$PROFILE" in
+    local|split-local|split-cloud)
+        ;;
+    *)
+        echo "Error: Invalid profile '$PROFILE'"
+        echo "Valid profiles: local, split-local, split-cloud"
+        exit 1
+        ;;
+esac
 
 # Determine script location and fts-platform root
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -10,6 +24,7 @@ FTS_PLATFORM_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$FTS_PLATFORM_DIR"
 echo "=== FTS Platform Deployment ==="
+echo "Profile: $PROFILE"
 echo "Working directory: $FTS_PLATFORM_DIR"
 
 # Check if .env exists, create from example if not
@@ -107,31 +122,65 @@ datasources:
       token: ${INFLUX_ADMIN_TOKEN}
 EOF
 
-# Create mosquitto config if not exists
-if [ ! -f mosquitto/mosquitto.conf ]; then
-    echo "Configuring Mosquitto..."
-    cat > mosquitto/mosquitto.conf << 'EOF'
-listener 1883
-protocol mqtt
+# Configure Mosquitto based on profile
+echo "Configuring Mosquitto for profile: $PROFILE..."
+mkdir -p mosquitto/config
 
-listener 9001
-protocol websockets
-
-allow_anonymous true
-
-persistence true
-persistence_location /mosquitto/data/
-
-log_dest file /mosquitto/log/mosquitto.log
-log_dest stdout
-log_type error
-log_type warning
-log_type notice
-log_type information
-
-max_keepalive 120
-EOF
-fi
+case "$PROFILE" in
+    local)
+        # Unauthenticated local setup
+        cp mosquitto/mosquitto-local.conf mosquitto/config/mosquitto.conf
+        ;;
+    split-cloud)
+        # Authenticated cloud setup - generate password file
+        if [ -z "$MQTT_USERNAME" ] || [ -z "$MQTT_PASSWORD" ] || [ "$MQTT_PASSWORD" = "CHANGE_ME_mqtt_password" ]; then
+            # Generate MQTT password if not set
+            MQTT_USERNAME="${MQTT_USERNAME:-fts}"
+            MQTT_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
+            echo ""
+            echo "Generated MQTT credentials (save these!):"
+            echo "  MQTT Username: $MQTT_USERNAME"
+            echo "  MQTT Password: $MQTT_PASSWORD"
+            echo ""
+            # Update .env with generated password
+            if grep -q "^MQTT_PASSWORD=" .env; then
+                sed -i "s/^MQTT_PASSWORD=.*/MQTT_PASSWORD=$MQTT_PASSWORD/" .env
+            else
+                echo "MQTT_PASSWORD=$MQTT_PASSWORD" >> .env
+            fi
+            if grep -q "^MQTT_USERNAME=" .env; then
+                sed -i "s/^MQTT_USERNAME=.*/MQTT_USERNAME=$MQTT_USERNAME/" .env
+            else
+                echo "MQTT_USERNAME=$MQTT_USERNAME" >> .env
+            fi
+        fi
+        cp mosquitto/mosquitto-split-cloud.conf mosquitto/config/mosquitto.conf
+        # Generate password file
+        echo "Generating MQTT password file..."
+        docker run --rm -v "$(pwd)/mosquitto/config:/mosquitto/config" eclipse-mosquitto:2 \
+            mosquitto_passwd -c -b /mosquitto/config/passwd "$MQTT_USERNAME" "$MQTT_PASSWORD"
+        ;;
+    split-local)
+        # Local with bridge to cloud - needs bridge settings
+        if [ -z "$MQTT_BRIDGE_HOST" ]; then
+            echo "Error: MQTT_BRIDGE_HOST must be set in .env for split-local profile"
+            echo "This should be the IP or hostname of your cloud Mosquitto instance"
+            exit 1
+        fi
+        if [ -z "$MQTT_USERNAME" ] || [ -z "$MQTT_PASSWORD" ] || [ "$MQTT_PASSWORD" = "CHANGE_ME_mqtt_password" ]; then
+            echo "Error: MQTT_USERNAME and MQTT_PASSWORD must be set in .env for split-local profile"
+            echo "Use the same credentials configured on the cloud instance"
+            exit 1
+        fi
+        MQTT_BRIDGE_PORT="${MQTT_BRIDGE_PORT:-1883}"
+        # Substitute variables in template
+        sed -e "s/\${MQTT_BRIDGE_HOST}/$MQTT_BRIDGE_HOST/g" \
+            -e "s/\${MQTT_BRIDGE_PORT}/$MQTT_BRIDGE_PORT/g" \
+            -e "s/\${MQTT_BRIDGE_USERNAME}/$MQTT_USERNAME/g" \
+            -e "s/\${MQTT_BRIDGE_PASSWORD}/$MQTT_PASSWORD/g" \
+            mosquitto/mosquitto-split-local.conf.template > mosquitto/config/mosquitto.conf
+        ;;
+esac
 
 # Create init-buckets script if not exists
 if [ ! -f influxdb/init-buckets.sh ]; then
@@ -162,11 +211,11 @@ fi
 # Pull and start services
 echo ""
 echo "Pulling Docker images..."
-docker compose pull
+docker compose --profile "$PROFILE" pull
 
 echo ""
 echo "Starting services..."
-docker compose up -d
+docker compose --profile "$PROFILE" up -d
 
 # Wait for services
 echo ""
@@ -176,7 +225,7 @@ sleep 10
 # Check status
 echo ""
 echo "=== Service Status ==="
-docker compose ps
+docker compose --profile "$PROFILE" ps
 
 # Get container IP
 CONTAINER_IP=$(hostname -I | awk '{print $1}')
@@ -199,6 +248,7 @@ echo ""
 echo "ESP32 Configuration:"
 echo "  Update broker_uri to: mqtt://${CONTAINER_IP}:1883"
 echo ""
-echo "Optional profiles:"
-echo "  RL Engine:   docker compose --profile rl up -d"
-echo "  UHD/SDR:     docker compose --profile uhd up -d"
+echo "Current profile: $PROFILE"
+echo ""
+echo "To add RL engine (local or split-cloud only):"
+echo "  docker compose --profile $PROFILE --profile rl up -d"

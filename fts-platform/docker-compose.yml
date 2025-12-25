@@ -1,11 +1,12 @@
 services:
   mosquitto:
+    profiles: ["local", "split-local", "split-cloud"]
     image: eclipse-mosquitto:2
     ports:
       - "1883:1883"
       - "9001:9001"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mosquitto/config:/mosquitto/config:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     restart: unless-stopped
@@ -16,6 +17,7 @@ services:
       retries: 3
 
   influxdb:
+    profiles: ["local", "split-cloud"]
     image: influxdb:2.7
     ports:
       - "8086:8086"
@@ -41,6 +43,7 @@ services:
       retries: 3
 
   telegraf:
+    profiles: ["local", "split-cloud"]
     image: telegraf:1.29
     volumes:
       - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
@@ -75,6 +78,7 @@ services:
       retries: 3
 
   grafana:
+    profiles: ["local", "split-cloud"]
     image: grafana/grafana:10.4.3
     ports:
       - "3000:3000"
@@ -112,8 +116,8 @@ services:
     restart: unless-stopped
 
   stream-mqtt:
+    profiles: ["local", "split-local"]
     build: ./qa
-    profiles: ["uhd"]  # Only with: docker compose --profile uhd up
     depends_on:
       mosquitto:
         condition: service_healthy
