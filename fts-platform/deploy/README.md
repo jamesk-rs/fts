@@ -1,6 +1,6 @@
 # FTS Platform - Proxmox LXC Deployment
 
-Deploy the full FTS stack (InfluxDB, Grafana, Mosquitto, Telegraf, RL Engine) to a Proxmox LXC container.
+Deploy the FTS TIG stack (InfluxDB, Grafana, Mosquitto, Telegraf) to a Proxmox LXC container.
 
 ## Prerequisites
 
@@ -11,36 +11,42 @@ Deploy the full FTS stack (InfluxDB, Grafana, Mosquitto, Telegraf, RL Engine) to
 ## Quick Deploy
 
 ```bash
-# 1. Copy files to Proxmox host
-scp -r deploy/ root@<proxmox-host>:/root/fts-deploy/
-
-# 2. SSH to Proxmox and run setup
+# 1. Create LXC container (run on Proxmox host)
+scp fts-platform/deploy/01-create-lxc.sh root@<proxmox-host>:/root/
 ssh root@<proxmox-host>
-cd /root/fts-deploy
-chmod +x *.sh
+chmod +x /root/01-create-lxc.sh
+/root/01-create-lxc.sh
 
-# 3. Create LXC container
-./01-create-lxc.sh
+# 2. Install Docker inside LXC (run on Proxmox host)
+scp fts-platform/deploy/02-install-docker.sh root@<proxmox-host>:/root/
+chmod +x /root/02-install-docker.sh
+/root/02-install-docker.sh
 
-# 4. Install Docker inside LXC (run from Proxmox host)
-./02-install-docker.sh
-
-# 5. Deploy FTS stack (run inside LXC)
+# 3. Clone repo inside LXC
 pct enter 200
-cd /opt/fts-platform
-./03-deploy-stack.sh
+git clone <your-repo-url> /opt/fts
+cd /opt/fts/fts-platform
+
+# 4. Deploy
+./deploy/03-deploy-stack.sh
 ```
 
 ## Configuration
 
-Edit `.env` before deployment to set:
-- `INFLUX_ADMIN_TOKEN` - Secure token for InfluxDB API
+The deploy script auto-generates credentials on first run. To customize, create `.env` before running:
+
+```bash
+cp .env.example .env
+# Edit .env with your values
+./deploy/03-deploy-stack.sh
+```
+
+Environment variables:
+- `INFLUX_ADMIN_TOKEN` - API token for InfluxDB
 - `INFLUX_ADMIN_PASSWORD` - Admin password for InfluxDB
 - `GRAFANA_ADMIN_PASSWORD` - Admin password for Grafana
 
 ## Ports
-
-After deployment, these ports will be exposed:
 
 | Service | Port | URL |
 |---------|------|-----|
@@ -48,6 +54,16 @@ After deployment, these ports will be exposed:
 | Grafana | 3000 | http://<lxc-ip>:3000 |
 | MQTT | 1883 | mqtt://<lxc-ip>:1883 |
 | MQTT WS | 9001 | ws://<lxc-ip>:9001 |
+
+## Optional Profiles
+
+```bash
+# Enable RL Engine
+docker compose --profile rl up -d
+
+# Enable UHD/SDR streaming
+docker compose --profile uhd up -d
+```
 
 ## ESP32 Configuration
 
@@ -65,9 +81,6 @@ fts_mqtt_config_t mqtt_cfg = {
 
 If your Proxmox host has a firewall, open these ports on the LXC:
 ```bash
-# On Proxmox host
-pct set 200 -firewall 0  # Or configure rules:
-# pvesh create /nodes/<node>/lxc/200/firewall/rules -type in -action ACCEPT -dport 1883 -proto tcp
-# pvesh create /nodes/<node>/lxc/200/firewall/rules -type in -action ACCEPT -dport 8086 -proto tcp
-# pvesh create /nodes/<node>/lxc/200/firewall/rules -type in -action ACCEPT -dport 3000 -proto tcp
+pct set 200 -firewall 0  # Disable firewall
+# Or configure rules for ports 1883, 3000, 8086, 9001
 ```

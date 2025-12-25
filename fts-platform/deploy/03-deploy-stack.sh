@@ -1,15 +1,18 @@
 #!/bin/bash
-# Deploy FTS Platform stack inside LXC container
-# Run this script inside the LXC container at /opt/fts-platform
+# Deploy FTS Platform stack
+# Run this script from the fts-platform directory (parent of deploy/)
 
 set -e
 
+# Determine script location and fts-platform root
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+FTS_PLATFORM_DIR="$(dirname "$SCRIPT_DIR")"
 
+cd "$FTS_PLATFORM_DIR"
 echo "=== FTS Platform Deployment ==="
+echo "Working directory: $FTS_PLATFORM_DIR"
 
-# Check if .env exists
+# Check if .env exists, create from example if not
 if [ ! -f .env ]; then
     if [ -f .env.example ]; then
         echo "Creating .env from .env.example..."
@@ -20,7 +23,22 @@ if [ ! -f .env ]; then
         GENERATED_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
 
         sed -i "s/CHANGE_ME_generate_with_openssl_rand_hex_32/$GENERATED_TOKEN/g" .env
-        sed -i "s/CHANGE_ME_secure_password_here/$GENERATED_PASS/g" .env
+        sed -i "s/CHANGE_ME_secure_password/$GENERATED_PASS/g" .env
+
+        echo ""
+        echo "Generated credentials (save these!):"
+        echo "  InfluxDB Token: $GENERATED_TOKEN"
+        echo "  Admin Password: $GENERATED_PASS"
+        echo ""
+    elif [ -f deploy/.env.example ]; then
+        echo "Creating .env from deploy/.env.example..."
+        cp deploy/.env.example .env
+
+        GENERATED_TOKEN=$(openssl rand -hex 32)
+        GENERATED_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
+
+        sed -i "s/CHANGE_ME_generate_with_openssl_rand_hex_32/$GENERATED_TOKEN/g" .env
+        sed -i "s/CHANGE_ME_secure_password/$GENERATED_PASS/g" .env
 
         echo ""
         echo "Generated credentials (save these!):"
@@ -28,7 +46,7 @@ if [ ! -f .env ]; then
         echo "  Admin Password: $GENERATED_PASS"
         echo ""
     else
-        echo "Error: .env.example not found. Please create .env manually."
+        echo "Error: No .env.example found. Please create .env manually."
         exit 1
     fi
 fi
@@ -44,7 +62,7 @@ if [ -z "$INFLUX_ADMIN_TOKEN" ] || [ "$INFLUX_ADMIN_TOKEN" = "CHANGE_ME_generate
     exit 1
 fi
 
-if [ -z "$INFLUX_ADMIN_PASSWORD" ] || [ "$INFLUX_ADMIN_PASSWORD" = "CHANGE_ME_secure_password_here" ]; then
+if [ -z "$INFLUX_ADMIN_PASSWORD" ] || [ "$INFLUX_ADMIN_PASSWORD" = "CHANGE_ME_secure_password" ]; then
     echo "Error: Please set INFLUX_ADMIN_PASSWORD in .env"
     exit 1
 fi
@@ -53,21 +71,14 @@ fi
 DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
 export DOCKER_GID
 
-# Create directory structure
+# Create required directories
 echo "Setting up directories..."
 mkdir -p grafana/provisioning/dashboards
 mkdir -p grafana/provisioning/datasources
 mkdir -p mosquitto
 mkdir -p influxdb
-mkdir -p telegraf
-mkdir -p rl_engine
 
-# Copy telegraf config
-if [ -f telegraf.cloud.conf ]; then
-    cp telegraf.cloud.conf telegraf/telegraf.conf
-fi
-
-# Update Grafana datasource with correct token
+# Configure Grafana datasource with correct token
 echo "Configuring Grafana datasource..."
 cat > grafana/provisioning/datasources/influxdb.yml << EOF
 apiVersion: 1
@@ -96,9 +107,10 @@ datasources:
       token: ${INFLUX_ADMIN_TOKEN}
 EOF
 
-# Create mosquitto config
-echo "Configuring Mosquitto..."
-cat > mosquitto/mosquitto.conf << 'EOF'
+# Create mosquitto config if not exists
+if [ ! -f mosquitto/mosquitto.conf ]; then
+    echo "Configuring Mosquitto..."
+    cat > mosquitto/mosquitto.conf << 'EOF'
 listener 1883
 protocol mqtt
 
@@ -119,10 +131,12 @@ log_type information
 
 max_keepalive 120
 EOF
+fi
 
-# Create init-buckets script
-echo "Creating InfluxDB init script..."
-cat > influxdb/init-buckets.sh << 'EOF'
+# Create init-buckets script if not exists
+if [ ! -f influxdb/init-buckets.sh ]; then
+    echo "Creating InfluxDB init script..."
+    cat > influxdb/init-buckets.sh << 'EOF'
 #!/bin/bash
 set -e
 
@@ -142,26 +156,17 @@ else
     echo "Bucket 'health' already exists"
 fi
 EOF
-chmod +x influxdb/init-buckets.sh
-
-# Check if we need RL engine
-if [ -d rl_engine ] && [ -f rl_engine/Dockerfile ]; then
-    echo "RL engine found, will be included in deployment"
-    COMPOSE_PROFILES=""
-else
-    echo "RL engine not found, deploying without it"
-    # Remove rl_engine from compose if not present
-    COMPOSE_PROFILES=""
+    chmod +x influxdb/init-buckets.sh
 fi
 
 # Pull and start services
 echo ""
 echo "Pulling Docker images..."
-docker compose -f docker-compose.cloud.yml pull
+docker compose pull
 
 echo ""
 echo "Starting services..."
-docker compose -f docker-compose.cloud.yml up -d
+docker compose up -d
 
 # Wait for services
 echo ""
@@ -171,7 +176,7 @@ sleep 10
 # Check status
 echo ""
 echo "=== Service Status ==="
-docker compose -f docker-compose.cloud.yml ps
+docker compose ps
 
 # Get container IP
 CONTAINER_IP=$(hostname -I | awk '{print $1}')
@@ -193,3 +198,7 @@ echo "  Grafana Password:  (see .env)"
 echo ""
 echo "ESP32 Configuration:"
 echo "  Update broker_uri to: mqtt://${CONTAINER_IP}:1883"
+echo ""
+echo "Optional profiles:"
+echo "  RL Engine:   docker compose --profile rl up -d"
+echo "  UHD/SDR:     docker compose --profile uhd up -d"

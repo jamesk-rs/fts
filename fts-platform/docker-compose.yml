@@ -21,11 +21,11 @@ services:
       - "8086:8086"
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
-      - DOCKER_INFLUXDB_INIT_ORG=fts
-      - DOCKER_INFLUXDB_INIT_BUCKET=fts
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=fts-token-change-me
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_ADMIN_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_ADMIN_PASSWORD:?Create .env from .env.example}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:-fts}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:-fts}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_ADMIN_TOKEN:?Create .env from .env.example}
     volumes:
       - influxdb_data:/var/lib/influxdb2
       - ./influxdb/init-buckets.sh:/docker-entrypoint-initdb.d/init-buckets.sh:ro
@@ -50,6 +50,7 @@ services:
     environment:
       - HOST_PROC=/host/proc
       - HOST_SYS=/host/sys
+      - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN:?Create .env from .env.example}
     group_add:
       - "${DOCKER_GID:-124}"  # GID of docker group on host (run: stat -c '%g' /var/run/docker.sock)
     depends_on:
@@ -78,7 +79,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Create .env from .env.example}
       - GF_INSTALL_PLUGINS=grafana-clock-panel
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -102,9 +103,9 @@ services:
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
       - INFLUX_URL=http://influxdb:8086
-      - INFLUX_TOKEN=fts-token-change-me
-      - INFLUX_ORG=fts
-      - INFLUX_BUCKET=fts
+      - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN:?Create .env from .env.example}
+      - INFLUX_ORG=${INFLUX_ORG:-fts}
+      - INFLUX_BUCKET=${INFLUX_BUCKET:-fts}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - LOG_LEVEL=INFO
@@ -112,7 +113,7 @@ services:
 
   stream-mqtt:
     build: ./qa
-    profiles: ["sdr"]  # Only with: docker compose --profile sdr up
+    profiles: ["uhd"]  # Only with: docker compose --profile uhd up
     depends_on:
       mosquitto:
         condition: service_healthy
