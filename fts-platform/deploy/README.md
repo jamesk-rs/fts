@@ -1,124 +1,204 @@
-# FTS Platform - Proxmox LXC Deployment
+# FTS Platform Deployment
 
-Deploy the FTS TIG stack (InfluxDB, Grafana, Mosquitto, Telegraf).
-* 01-create-lxc.sh - Run on ProxMox host (if you want to deploy in LXC)
-* 02-install-docker.sh - Run inside the container (LXS or whatever other container or VM you choose)
-* 03-deploy-stack.sh - Run inside the container, it will create .env unless it exists already
+Deploy the FTS TIG stack (Telegraf, InfluxDB, Grafana) with MQTT broker.
 
-## Prerequisites
+## Scripts
 
-- Proxmox VE 7.x or 8.x
-- SSH access to Proxmox host
-- Available storage for LXC container (recommended: 32GB+)
+| Script | Where to run | Purpose |
+|--------|--------------|---------|
+| `01-create-lxc.sh` | Proxmox host | Creates LXC container (Proxmox-specific) |
+| `02-install-docker.sh` | Inside LXC | Installs Docker (Proxmox-specific) |
+| `03-deploy-stack.sh` | Any Docker host | Deploys FTS stack (universal) |
 
-## Quick Deploy
+The `03-deploy-stack.sh` script works on any Debian-based system with Docker Compose installed - Proxmox LXC, regular VM, cloud instance, or bare metal.
+
+## Deployment Profiles
+
+### Local Setup
+
+Everything runs on a single machine. Use this for development or when all hardware (ESP32, SDR) is connected to the same host.
+
+```
+┌─────────────────────────────────────────┐
+│              Local Host                 │
+│                                         │
+│  ESP32 ──┐                              │
+│          ├─► Mosquitto ─► Telegraf      │
+│  SDR ────┤                    │         │
+│          ▼                    ▼         │
+│    stream-mqtt           InfluxDB       │
+│                              │          │
+│                              ▼          │
+│                           Grafana       │
+└─────────────────────────────────────────┘
+```
+
+### Split Setup
+
+Lab equipment stays local, TIG stack runs in the cloud. MQTT messages are bridged over the internet with authentication. Handles unreliable connections - messages queue locally during outages.
+
+```
+LAB (Shuttle PC)                         CLOUD (LXC/VM)
+┌─────────────────────┐                  ┌─────────────────────┐
+│  ESP32 ──┐          │                  │                     │
+│          ├─► Mosquitto ═══════════════►│ Mosquitto (auth)    │
+│  SDR ────┤     │    │   MQTT bridge    │      │              │
+│          ▼     │    │   (encrypted)    │      ▼              │
+│   stream-mqtt  │    │                  │   Telegraf          │
+│                │    │                  │      │              │
+│           queue on  │                  │      ▼              │
+│           disconnect│                  │   InfluxDB          │
+│                     │                  │      │              │
+│                     │                  │      ▼              │
+│                     │                  │   Grafana           │
+└─────────────────────┘                  └─────────────────────┘
+```
+
+## Installation
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Git to clone the repository
+
+### Local Setup Installation
 
 ```bash
-# 1. Create LXC container (run on Proxmox host)
-scp fts-platform/deploy/01-create-lxc.sh root@<proxmox-host>:/root/
-ssh root@<proxmox-host>
-chmod +x /root/01-crea01-create-lxc.shte-lxc.sh
-/root/
-
-# 2. Install Docker inside LXC (run on Proxmox host)
-scp fts-platform/deploy/02-install-docker.sh root@<proxmox-host>:/root/
-chmod +x /root/02-install-docker.sh
-/root/02-install-docker.sh
-
-# 3. Clone repo inside LXC
-pct enter 200
-git clone <your-repo-url> /opt/fts
+# Clone repository
+git clone <repo-url> /opt/fts
 cd /opt/fts/fts-platform
 
-# 4. Deploy
-./deploy/03-deploy-stack.sh
+# Deploy with local profile
+./deploy/03-deploy-stack.sh local
+```
+
+The script will:
+1. Generate `.env` with secure credentials
+2. Configure unauthenticated Mosquitto (local network only)
+3. Start all services
+
+Access points after deployment:
+- Grafana: http://localhost:3000
+- InfluxDB: http://localhost:8086
+- MQTT: mqtt://localhost:1883
+
+### Split Setup Installation
+
+**Step 1: Deploy Cloud Instance**
+
+On your cloud server (LXC, VM, or any Docker host):
+
+```bash
+# Clone repository
+git clone <repo-url> /opt/fts
+cd /opt/fts/fts-platform
+
+# Deploy with split-cloud profile
+./deploy/03-deploy-stack.sh split-cloud
+```
+
+The script will:
+1. Generate `.env` with secure credentials including MQTT username/password
+2. Configure authenticated Mosquitto
+3. Start Mosquitto + TIG stack
+
+**Save the generated credentials** - you'll need `MQTT_USERNAME` and `MQTT_PASSWORD` for the lab setup.
+
+**Step 2: Deploy Lab Instance**
+
+On your lab machine (Shuttle PC):
+
+```bash
+# Clone repository
+git clone <repo-url> /opt/fts
+cd /opt/fts/fts-platform
+
+# Create .env with cloud credentials
+cp .env.example .env
+```
+
+Edit `.env` and set:
+```bash
+# Use same credentials as cloud instance
+MQTT_USERNAME=fts
+MQTT_PASSWORD=<password from cloud .env>
+
+# Cloud instance address
+MQTT_BRIDGE_HOST=<cloud-ip-or-hostname>
+MQTT_BRIDGE_PORT=1883
+```
+
+Then deploy:
+```bash
+./deploy/03-deploy-stack.sh split-local
+```
+
+The script will:
+1. Configure Mosquitto with bridge to cloud
+2. Start Mosquitto + stream-mqtt
+3. Begin forwarding `fts/#` messages to cloud
+
+### Proxmox LXC Installation
+
+If deploying to Proxmox, use the helper scripts:
+
+```bash
+# On Proxmox host: create LXC container
+scp deploy/01-create-lxc.sh root@proxmox:/root/
+ssh root@proxmox
+chmod +x /root/01-create-lxc.sh
+./01-create-lxc.sh
+
+# On Proxmox host: install Docker in LXC
+scp deploy/02-install-docker.sh root@proxmox:/root/
+chmod +x /root/02-install-docker.sh
+./02-install-docker.sh
+
+# Enter LXC and deploy
+pct enter 200
+git clone <repo-url> /opt/fts
+cd /opt/fts/fts-platform
+./deploy/03-deploy-stack.sh split-cloud  # or 'local'
 ```
 
 ## Configuration
 
-The deploy script auto-generates credentials on first run. To customize, create `.env` before running:
+### Environment Variables
+
+All configuration is in `.env` (auto-generated from `.env.example`):
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `INFLUX_ADMIN_TOKEN` | Yes | InfluxDB API token |
+| `INFLUX_ADMIN_PASSWORD` | Yes | InfluxDB admin password |
+| `GRAFANA_ADMIN_PASSWORD` | Yes | Grafana admin password |
+| `MQTT_USERNAME` | split-* | MQTT authentication username |
+| `MQTT_PASSWORD` | split-* | MQTT authentication password |
+| `MQTT_BRIDGE_HOST` | split-local | Cloud Mosquitto address |
+| `MQTT_BRIDGE_PORT` | split-local | Cloud Mosquitto port (default: 1883) |
+
+### Adding RL Engine
+
+The RL engine can be added to `local` or `split-cloud` profiles:
 
 ```bash
-cp .env.example .env
-# Edit .env with your values
-./deploy/03-deploy-stack.sh
+docker compose --profile local --profile rl up -d
+# or
+docker compose --profile split-cloud --profile rl up -d
 ```
-
-Environment variables:
-- `INFLUX_ADMIN_TOKEN` - API token for InfluxDB
-- `INFLUX_ADMIN_PASSWORD` - Admin password for InfluxDB
-- `GRAFANA_ADMIN_PASSWORD` - Admin password for Grafana
 
 ## Ports
 
-| Service | Port | URL |
-|---------|------|-----|
-| InfluxDB | 8086 | http://<lxc-ip>:8086 |
-| Grafana | 3000 | http://<lxc-ip>:3000 |
-| MQTT | 1883 | mqtt://<lxc-ip>:1883 |
-| MQTT WS | 9001 | ws://<lxc-ip>:9001 |
-
-## Deployment Profiles
-
-Three deployment modes are available:
-
-| Profile | Services | Use Case |
-|---------|----------|----------|
-| `local` | Mosquitto + TIG + stream-mqtt | Full local stack (Shuttle PC) |
-| `split-local` | Mosquitto + stream-mqtt | Lab side of split setup |
-| `split-cloud` | Mosquitto + TIG | Cloud side of split setup |
-
-```bash
-# Full local deployment (everything on one machine)
-docker compose --profile local up -d
-
-# Split setup - on Lab/Shuttle (with MQTT bridge to cloud)
-docker compose --profile split-local up -d
-
-# Split setup - on Cloud LXC
-docker compose --profile split-cloud up -d
-
-# Add RL engine (works with local or split-cloud)
-docker compose --profile local --profile rl up -d
-```
-
-### Split Setup Architecture
-
-```
-LAB (Shuttle)                          CLOUD (LXC)
-┌──────────────────┐                   ┌──────────────────┐
-│ ESP32 → Mosquitto ════════════════►  │ Mosquitto        │
-│ SDR → stream-mqtt│   MQTT bridge     │   ↓              │
-│                  │                   │ Telegraf         │
-│                  │                   │   ↓              │
-│                  │                   │ InfluxDB→Grafana │
-└──────────────────┘                   └──────────────────┘
-```
-
-For split setup, add bridge config to Lab's `mosquitto.conf`:
-```conf
-connection fts-cloud
-address <cloud-ip>:1883
-topic fts/# out 1
-cleansession false
-```
-
-## ESP32 Configuration
-
-Update your ESP32 firmware to connect to the cloud:
-
-```c
-fts_mqtt_config_t mqtt_cfg = {
-    .broker_uri = "mqtt://<lxc-ip>:1883",
-    .device_id = "slave1",
-    .ctrl_cb = control_callback,
-};
-```
+| Service | Port | Protocol |
+|---------|------|----------|
+| Grafana | 3000 | HTTP |
+| InfluxDB | 8086 | HTTP |
+| MQTT | 1883 | TCP |
+| MQTT WebSocket | 9001 | WS |
 
 ## Firewall
 
-If your Proxmox host has a firewall, open these ports on the LXC:
-```bash
-pct set 200 -firewall 0  # Disable firewall
-# Or configure rules for ports 1883, 3000, 8086, 9001
-```
+For split setup, ensure these ports are open on the cloud instance:
+- 1883/tcp - MQTT (required for bridge)
+- 3000/tcp - Grafana (for dashboard access)
+- 8086/tcp - InfluxDB (optional, for direct API access)
