@@ -92,6 +92,7 @@ cat > grafana/provisioning/datasources/influxdb.yml << EOF
 apiVersion: 1
 datasources:
   - name: InfluxDB
+    uid: influxdb
     type: influxdb
     access: proxy
     url: http://influxdb:8086
@@ -104,6 +105,7 @@ datasources:
     isDefault: true
 
   - name: InfluxDB-Health
+    uid: influxdb-health
     type: influxdb
     access: proxy
     url: http://influxdb:8086
