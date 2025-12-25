@@ -54,6 +54,8 @@ services:
       - HOST_PROC=/host/proc
       - HOST_SYS=/host/sys
       - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN:?Create .env from .env.example}
+      - MQTT_USERNAME=${MQTT_USERNAME:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
     group_add:
       - "${DOCKER_GID:-124}"  # GID of docker group on host (run: stat -c '%g' /var/run/docker.sock)
     depends_on:
