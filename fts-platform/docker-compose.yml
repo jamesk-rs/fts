@@ -28,14 +28,17 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:?Create .env from .env.example}
       - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:?Create .env from .env.example}
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_ADMIN_TOKEN:?Create .env from .env.example}
+      #- INFLUXD_QUERY_CONCURRENCY=0
+      #- INFLUXD_QUERY_QUEUE_SIZE=0
+      #- INFLUXD_STORAGE_CACHE_MAX_MEMORY_SIZE=4294967296
     volumes:
       - influxdb_data:/var/lib/influxdb2
       - ./influxdb/init-buckets.sh:/docker-entrypoint-initdb.d/init-buckets.sh:ro
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
+    #deploy:
+    #  resources:
+    #    limits:
+    #      cpus: '4'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
       interval: 30s
