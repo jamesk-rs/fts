@@ -79,28 +79,30 @@ menu "Time Synchronization Configuration"
             pulses. Enable this option if you need pulses running during the initial
             sync acquisition phase.
 
+    config FTS_MIN_PERIOD_CPU_CYCLES
+        int "Minimum timer period in CPU cycles"
+        default 5000
+        range 1000 50000
+        help
+            Minimum timer period to prevent race conditions.
+            Should be enough for ISR + user callback execution.
+            At 240MHz CPU, 5000 cycles = 21us = 833 ticks at 40MHz timer.
+
     menu "WiFi Configuration"
         config FTS_WIFI_SSID
             string "WiFi SSID"
             default "FTS_NETWORK"
             help
                 SSID of the WiFi network to connect to.
-                All devices (master and slaves) connect to this network.
+                Slave devices connect to this network. Master either
+                connects to this network (in External AP mode) or servers it
+                (in Internal AP mode the master).
 
         config FTS_WIFI_PASSWORD
             string "WiFi Password"
             default "fts-password"
             help
                 Password for the WiFi network (min 8 characters)
-
-        config FTS_MIN_PERIOD_CPU_CYCLES
-            int "Minimum timer period in CPU cycles"
-            default 5000
-            range 1000 50000
-            help
-                Minimum timer period to prevent race conditions.
-                Should be enough for ISR + user callback execution.
-                At 240MHz CPU, 5000 cycles = 21us = 833 ticks at 40MHz timer.
     endmenu
 
     menu "Master Configuration"
