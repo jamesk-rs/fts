@@ -57,6 +57,17 @@ typedef void (*ftm_callback_t)(const ftm_report_t *report);
 esp_err_t ftm_master_ap_init(const char *ssid, const char *password, uint8_t channel);
 
 /**
+ * Initialize FTM master in ESP-NOW mode (for USB-NCM uplink)
+ *
+ * Master runs hidden WiFi AP for FTM responder. Sync packets are broadcast
+ * via ESP-NOW instead of UDP. No IP stack on WiFi - USB-NCM handles IP.
+ *
+ * @param channel WiFi channel for ESP-NOW and FTM
+ * @return ESP_OK on success
+ */
+esp_err_t ftm_master_espnow_init(uint8_t channel);
+
+/**
  * Initialize FTM master in STA mode (connects to external WiFi)
  *
  * Master connects to external network like slaves do. This allows master to
@@ -77,6 +88,17 @@ esp_err_t ftm_master_sta_init(const char *ssid, const char *password);
  * @return ESP_OK on success
  */
 esp_err_t ftm_slave_init(const char *ssid, const char *password);
+
+/**
+ * Initialize FTM slave in ESP-NOW mode (for USB-NCM uplink)
+ *
+ * Slave listens for master sync via ESP-NOW and runs FTM sessions.
+ * No IP stack on WiFi - USB-NCM handles IP.
+ *
+ * @param channel WiFi channel for ESP-NOW and FTM (must match master)
+ * @return ESP_OK on success
+ */
+esp_err_t ftm_slave_espnow_init(uint8_t channel);
 
 /**
  * Register callback for FTM reports

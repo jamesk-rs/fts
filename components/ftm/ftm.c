@@ -18,6 +18,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_now.h"
 #include "lwip/sockets.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
@@ -127,6 +128,8 @@ static volatile int64_t s_t1_t4_initial_offset = 0;  // Initial offset for T1/T4
  */
 static void ftm_sync_broadcast_task(void *arg)
 {
+    wifi_interface_t ifidx = (wifi_interface_t)(uintptr_t)arg;
+
     ESP_LOGI(TAG, "UDP sync broadcast task started (port %d, interval %d ms)",
              FTM_SYNC_UDP_PORT, FTM_SYNC_BROADCAST_INTERVAL_MS);
 
@@ -154,9 +157,9 @@ static void ftm_sync_broadcast_task(void *arg)
     };
     inet_pton(AF_INET, FTM_SYNC_BROADCAST_ADDR, &dest_addr.sin_addr);
 
-    // Get our own MAC address
+    // Get our own MAC address (use correct interface: AP for AP mode, STA for STA mode)
     uint8_t own_mac[6];
-    esp_wifi_get_mac(WIFI_IF_STA, own_mac);
+    esp_wifi_get_mac(ifidx, own_mac);
 
     ftm_sync_packet_t pkt = {
         .magic = FTM_SYNC_MAGIC,
@@ -186,17 +189,83 @@ static void ftm_sync_broadcast_task(void *arg)
  */
 static esp_err_t ftm_sync_master_init(uint8_t channel, wifi_interface_t ifidx)
 {
-    (void)ifidx;  // Not used for UDP
-
     // Generate run_id
     s_run_id = esp_random();
-    ESP_LOGI(TAG, "Sync master init (UDP): run_id=0x%08lx, channel=%d",
+    ESP_LOGI(TAG, "Sync master init (UDP): run_id=0x%08lx, channel=%d, ifidx=%d",
+             (unsigned long)s_run_id, channel, ifidx);
+
+    // Start broadcast task (pass interface as argument)
+    BaseType_t xret = xTaskCreate(
+        ftm_sync_broadcast_task,
+        "ftm_sync",
+        FTM_SYNC_TASK_STACK_SIZE,
+        (void *)(uintptr_t)ifidx,
+        FTM_SYNC_TASK_PRIORITY,
+        NULL
+    );
+
+    if (xret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create sync broadcast task");
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+// ============================================================================
+// ESP-NOW Sync - Master side
+// ============================================================================
+
+/**
+ * ESP-NOW sync broadcast task (master)
+ */
+static void ftm_espnow_broadcast_task(void *arg)
+{
+    ESP_LOGI(TAG, "ESP-NOW sync broadcast task started (interval %d ms)",
+             FTM_SYNC_BROADCAST_INTERVAL_MS);
+
+    ftm_sync_packet_t pkt = {
+        .magic = FTM_SYNC_MAGIC,
+        .run_id = s_run_id,
+        .channel = s_ap_channel,
+    };
+
+    // Get our own MAC address (AP interface for master)
+    esp_wifi_get_mac(WIFI_IF_AP, pkt.mac);
+
+    ESP_LOGI(TAG, "Broadcasting MAC=%02x:%02x:%02x:%02x:%02x:%02x, channel=%d",
+             pkt.mac[0], pkt.mac[1], pkt.mac[2], pkt.mac[3], pkt.mac[4], pkt.mac[5],
+             s_ap_channel);
+
+    // Broadcast MAC address for ESP-NOW
+    static const uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+    while (1) {
+        pkt.mac_clock_us = clock_get_us();
+
+        esp_err_t ret = esp_now_send(broadcast_mac, (uint8_t *)&pkt, sizeof(pkt));
+        if (ret != ESP_OK) {
+            ESP_LOGD(TAG, "ESP-NOW send failed: %s", esp_err_to_name(ret));
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(FTM_SYNC_BROADCAST_INTERVAL_MS));
+    }
+}
+
+/**
+ * Initialize ESP-NOW sync for master
+ */
+static esp_err_t ftm_sync_master_espnow_init(uint8_t channel)
+{
+    // Generate run_id
+    s_run_id = esp_random();
+    ESP_LOGI(TAG, "Sync master init (ESP-NOW): run_id=0x%08lx, channel=%d",
              (unsigned long)s_run_id, channel);
 
     // Start broadcast task
     BaseType_t xret = xTaskCreate(
-        ftm_sync_broadcast_task,
-        "ftm_sync",
+        ftm_espnow_broadcast_task,
+        "espnow_sync",
         FTM_SYNC_TASK_STACK_SIZE,
         NULL,
         FTM_SYNC_TASK_PRIORITY,
@@ -204,7 +273,7 @@ static esp_err_t ftm_sync_master_init(uint8_t channel, wifi_interface_t ifidx)
     );
 
     if (xret != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create sync broadcast task");
+        ESP_LOGE(TAG, "Failed to create ESP-NOW sync broadcast task");
         return ESP_FAIL;
     }
 
@@ -369,6 +438,83 @@ static esp_err_t ftm_sync_slave_init(void)
 }
 
 // ============================================================================
+// ESP-NOW Sync - Slave side
+// ============================================================================
+
+/**
+ * ESP-NOW receive callback (slave)
+ * Called from WiFi task context when ESP-NOW packet is received
+ */
+static void ftm_espnow_recv_cb(const esp_now_recv_info_t *info,
+                                const uint8_t *data, int len)
+{
+    if (len != sizeof(ftm_sync_packet_t)) {
+        return;
+    }
+
+    const ftm_sync_packet_t *pkt = (const ftm_sync_packet_t *)data;
+    if (pkt->magic != FTM_SYNC_MAGIC) {
+        return;
+    }
+
+    EventBits_t bits = xEventGroupGetBits(s_ftm_event_group);
+    if (!(bits & FTM_MASTER_SYNC_BIT)) {
+        // FIRST SYNC: capture master info from packet
+        memcpy(s_master_mac, pkt->mac, 6);
+
+        // Check channel match (should always match in ESP-NOW mode since preconfigured)
+        if (s_ap_channel != pkt->channel) {
+            ESP_LOGW(TAG, "ESP-NOW FIRST SYNC: channel mismatch: slave=%d, master=%d",
+                     s_ap_channel, pkt->channel);
+            // In ESP-NOW mode we can't easily switch channels, just warn
+        }
+
+        // Initialize run_id and sync master clock
+        s_remote_run_id = pkt->run_id;
+        ftm_sync_master_clock(pkt->mac_clock_us);
+
+        // Mark as synced
+        xEventGroupSetBits(s_ftm_event_group, FTM_MASTER_SYNC_BIT);
+        ESP_LOGI(TAG, "ESP-NOW FIRST SYNC: MAC=%02x:%02x:%02x:%02x:%02x:%02x, channel=%d, run_id=0x%08lx",
+                 s_master_mac[0], s_master_mac[1], s_master_mac[2],
+                 s_master_mac[3], s_master_mac[4], s_master_mac[5],
+                 s_ap_channel, (unsigned long)s_remote_run_id);
+    } else {
+        // Already synced - ignore packets from other masters
+        if (memcmp(pkt->mac, s_master_mac, 6) != 0) {
+            ESP_LOGW(TAG, "Ignoring sync from unknown master MAC=%02x:%02x:%02x:%02x:%02x:%02x",
+                     pkt->mac[0], pkt->mac[1], pkt->mac[2],
+                     pkt->mac[3], pkt->mac[4], pkt->mac[5]);
+            return;
+        }
+
+        // Detect master reboot
+        if (pkt->run_id != s_remote_run_id) {
+            ESP_LOGE(TAG, "Master reboot detected run_id=0x%08lx (was 0x%08lx)",
+                (unsigned long)pkt->run_id, (unsigned long)s_remote_run_id);
+            abort();
+        }
+    }
+}
+
+/**
+ * Initialize ESP-NOW sync for slave
+ */
+static esp_err_t ftm_sync_slave_espnow_init(void)
+{
+    ESP_LOGI(TAG, "Sync slave init (ESP-NOW)...");
+
+    // Register receive callback
+    esp_err_t ret = esp_now_register_recv_cb(ftm_espnow_recv_cb);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register ESP-NOW recv callback: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    return ESP_OK;
+}
+
+// ============================================================================
 // FTM Event Handlers
 // ============================================================================
 
@@ -515,12 +661,21 @@ static void slave_ftm_poll_task(void *pvParameters)
 
     // Outer loop: wait for connection + sync, then run FTM sessions
     while (1) {
-        // Wait for WiFi connected (GOT_IP) and master sync
+#ifdef CONFIG_FTS_MODE_USB_NCM
+        // ESP-NOW mode: no WiFi IP, only wait for master sync
+        ESP_LOGI(TAG, "Waiting for master sync (ESP-NOW)...");
+        xEventGroupWaitBits(s_ftm_event_group,
+                            FTM_MASTER_SYNC_BIT,
+                            pdFALSE, pdTRUE,
+                            portMAX_DELAY);
+#else
+        // WiFi mode: wait for IP and master sync
         ESP_LOGI(TAG, "Waiting for IP and master sync...");
         xEventGroupWaitBits(s_ftm_event_group,
                             FTM_GOT_IP_BIT | FTM_MASTER_SYNC_BIT,
                             pdFALSE, pdTRUE,  // Don't clear, wait for ALL
                             portMAX_DELAY);
+#endif
 
         ESP_LOGI(TAG, "Ready, starting FTM sessions");
 
@@ -533,12 +688,14 @@ static void slave_ftm_poll_task(void *pvParameters)
 
         // Inner loop: run FTM sessions while connected
         while (1) {
-            // Check if still connected
+#ifndef CONFIG_FTS_MODE_USB_NCM
+            // Check if still connected (only in WiFi modes)
             EventBits_t bits = xEventGroupGetBits(s_ftm_event_group);
             if (!(bits & FTM_GOT_IP_BIT)) {
                 ESP_LOGI(TAG, "WiFi disconnected, pausing FTM sessions");
                 break;  // Back to outer wait loop
             }
+#endif
 
             // Run FTM session
             ftm_cfg.channel = s_ap_channel;
@@ -889,6 +1046,134 @@ esp_err_t ftm_slave_init(const char *ssid, const char *password)
 
     // Connect
     ESP_ERROR_CHECK(esp_wifi_connect());
+
+#ifdef CONFIG_FTS_CSV_OUTPUT
+    printf("FTM,session,status,entries,rtt_avg_ns,rtt_min_ns,rtt_max_ns,rssi_avg,rssi_min,rssi_max\n");
+#endif
+
+    return ESP_OK;
+}
+
+esp_err_t ftm_master_espnow_init(uint8_t channel)
+{
+    ESP_LOGI(TAG, "Initializing FTM master (ESP-NOW mode)...");
+
+    esp_err_t ret;
+
+    // Initialize NVS
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // Initialize WiFi (no esp_netif - USB handles IP)
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+
+    // Configure AP with FTM responder, hidden SSID (no connections needed)
+    wifi_config_t ap_config = {
+        .ap = {
+            .ssid = "FTS_ESPNOW",
+            .ssid_hidden = 1,  // Hidden SSID
+            .channel = channel,
+            .authmode = WIFI_AUTH_OPEN,
+            .max_connection = 0,  // No STA connections
+            .ftm_responder = true,
+        },
+    };
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+
+    // Suppress verbose WiFi logs
+    esp_log_level_set("wifi", ESP_LOG_ERROR);
+
+    // Start WiFi
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    s_ap_channel = channel;
+
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_AP, mac);
+    ESP_LOGI(TAG, "Master ESP-NOW: MAC=%02x:%02x:%02x:%02x:%02x:%02x, channel=%d",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], channel);
+
+    // Initialize ESP-NOW
+    ESP_ERROR_CHECK(esp_now_init());
+
+    // Initialize clock and start ESP-NOW sync broadcast
+    ESP_ERROR_CHECK(clock_init());
+    ESP_ERROR_CHECK(ftm_sync_master_espnow_init(channel));
+
+    return ESP_OK;
+}
+
+esp_err_t ftm_slave_espnow_init(uint8_t channel)
+{
+    ESP_LOGI(TAG, "Initializing FTM slave (ESP-NOW mode)...");
+
+    esp_err_t ret;
+
+    // Initialize NVS
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // Create event group
+    s_ftm_event_group = xEventGroupCreate();
+    if (!s_ftm_event_group) {
+        ESP_LOGE(TAG, "Failed to create event group");
+        return ESP_FAIL;
+    }
+
+    // Initialize WiFi in STA mode (no esp_netif - USB handles IP)
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+
+    // Suppress verbose WiFi logs
+    esp_log_level_set("wifi", ESP_LOG_ERROR);
+
+    // Start WiFi first, then set channel
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    // Set channel for ESP-NOW/FTM (no connection, just RF channel)
+    ESP_ERROR_CHECK(esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE));
+
+    s_ap_channel = channel;
+
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    ESP_LOGI(TAG, "Slave ESP-NOW: MAC=%02x:%02x:%02x:%02x:%02x:%02x, channel=%d",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], channel);
+
+    // Register FTM event handler
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_FTM_REPORT,
+                                                &slave_ftm_event_handler, NULL));
+
+    // Initialize ESP-NOW
+    ESP_ERROR_CHECK(esp_now_init());
+
+    // Initialize clock and ESP-NOW sync listener
+    ESP_ERROR_CHECK(clock_init());
+    ESP_ERROR_CHECK(ftm_sync_slave_espnow_init());
+
+    // Start FTM poll task (waits for master sync via ESP-NOW)
+    BaseType_t xret = xTaskCreate(slave_ftm_poll_task, "ftm_poll",
+                                   FTM_POLL_TASK_STACK_SIZE, NULL,
+                                   FTM_POLL_TASK_PRIORITY, &s_ftm_task_handle);
+    if (xret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create FTM poll task");
+        return ESP_FAIL;
+    }
 
 #ifdef CONFIG_FTS_CSV_OUTPUT
     printf("FTM,session,status,entries,rtt_avg_ns,rtt_min_ns,rtt_max_ns,rssi_avg,rssi_min,rssi_max\n");

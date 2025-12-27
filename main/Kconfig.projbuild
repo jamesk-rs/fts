@@ -5,93 +5,77 @@ menu "Time Synchronization Configuration"
         default FTS_ROLE_MASTER
         help
             Select whether this device is master or slave.
-            Master: Runs as AP with FTM responder
-            Slave: Connects to master and synchronizes
+            Master: Broadcasts time reference
+            Slave: Synchronizes to master
 
         config FTS_ROLE_MASTER
-            bool "Master (AP)"
+            bool "Master"
         config FTS_ROLE_SLAVE
-            bool "Slave (STA)"
+            bool "Slave"
     endchoice
 
-    config FTS_ENABLE_GPIO
-        bool "Enable GPIO Synchronization (requires MCPWM)"
-        default y
-        depends on SOC_MCPWM_SUPPORTED
+    # ========================================
+    # NETWORK MODE (core architectural choice)
+    # ========================================
+    choice FTS_NETWORK_MODE
+        prompt "Network Mode"
+        default FTS_MODE_INTERNAL_AP
         help
-            Enable synchronized GPIO toggling using MCPWM peripheral.
-            Requires chip with MCPWM support (ESP32-S3, not ESP32-C3).
+            Select network architecture for FTM timing and telemetry uplink.
 
-    config FTS_LED_ENABLED
-        bool "Enable status LED"
-        default y
-        help
-            Enable status LED blinking at 1Hz.
-            Disable for boards without a user LED (e.g., XIAO ESP32-C3).
-
-    config FTS_LED_GPIO
-        int "LED GPIO Pin Number"
-        default 21
-        range 0 48
-        depends on FTS_LED_ENABLED
-        help
-            GPIO pin number for the status LED (blinks at 1Hz).
-            Common values:
-            - XIAO ESP32-S3: GPIO 21 (yellow user LED)
-            - Waveshare ESP32-S3-LCD-1.47: GPIO 41
-
-    config FTS_CSV_OUTPUT
-        bool "Enable CSV Debug Output"
-        default n
-        help
-            Enable CSV-formatted debug output for FTM and CRM data.
-            Useful for plotting and analysis, but clutters console.
-            Output format: FTM_UNWRAP,... and REGR,...
-
-    config FTS_MAC_TIMER_ALIGNMENT_TEST_CYCLES
-        int "Number of Test Cycles"
-        default 0
-        range 0 1000000
-        help
-            If not zero, enables test mode for MAC timer alignment measurement.
-            Device will measure MAC clock alignment and output results as CSV.
-            It will make given number of cycles and reboot.
-            Useful for automated testing and validation.
-
-    config FTS_TEST_ALIGN_ONCE
-        bool "Test Mode: Initial Alignment Only (No Re-alignment)"
-        default n
-        depends on FTS_ROLE_SLAVE
-        help
-            When enabled, slave performs initial alignment only and never re-aligns.
-            This tests how well the initial alignment routine works without continuous
-            corrections from subsequent FTM measurements. Useful for validating
-            alignment accuracy and clock stability.
-
-    config FTS_PULSE_BEFORE_ALIGN
-        bool "Enable Pulse Output Before Alignment (Slave)"
-        default n
-        depends on FTS_ROLE_SLAVE && FTS_ENABLE_GPIO
-        help
-            When enabled, slave outputs MCPWM pulses immediately after timer start,
-            before synchronization with master is acquired. By default, slave GPIO
-            is held LOW until alignment completes to avoid outputting unsynchronized
-            pulses. Enable this option if you need pulses running during the initial
-            sync acquisition phase.
-
-    menu "WiFi Configuration"
-        config FTS_WIFI_SSID
-            string "WiFi SSID"
-            default "FTS_NETWORK"
+        config FTS_MODE_INTERNAL_AP
+            bool "Internal AP (Master creates AP)"
             help
-                SSID of the WiFi network to connect to.
-                All devices (master and slaves) connect to this network.
+                Master creates WiFi AP. Slaves connect to master.
+                FTM: via WiFi to master AP
+                Telemetry: via master's network
 
-        config FTS_WIFI_PASSWORD
-            string "WiFi Password"
-            default "fts-password"
+        config FTS_MODE_EXTERNAL_AP
+            bool "External AP (All connect to router)"
             help
-                Password for the WiFi network (min 8 characters)
+                All devices connect to external WiFi AP.
+                FTM: via WiFi (same channel required)
+                Telemetry: via external AP
+
+        config FTS_MODE_USB_NCM
+            bool "USB-NCM (ESP-NOW timing, USB uplink)"
+            depends on IDF_TARGET_ESP32S3
+            help
+                ESP-NOW for timing sync, USB-NCM for telemetry.
+                FTM: via ESP-NOW broadcast
+                Telemetry: via USB to Linux host
+                No WiFi infrastructure required.
+    endchoice
+
+    # ========================================
+    # GPIO / TIMING
+    # ========================================
+    menu "GPIO and Timing"
+        config FTS_ENABLE_GPIO
+            bool "Enable GPIO Synchronization (requires MCPWM)"
+            default y
+            depends on SOC_MCPWM_SUPPORTED
+            help
+                Enable synchronized GPIO toggling using MCPWM peripheral.
+                Requires chip with MCPWM support (ESP32-S3, not ESP32-C3).
+
+        config FTS_LED_ENABLED
+            bool "Enable status LED"
+            default y
+            help
+                Enable status LED blinking at 1Hz.
+                Disable for boards without a user LED.
+
+        config FTS_LED_GPIO
+            int "LED GPIO Pin Number"
+            default 21
+            range 0 48
+            depends on FTS_LED_ENABLED
+            help
+                GPIO pin number for the status LED (blinks at 1Hz).
+                Common values:
+                - XIAO ESP32-S3: GPIO 21 (yellow user LED)
+                - Waveshare ESP32-S3-LCD-1.47: GPIO 41
 
         config FTS_MIN_PERIOD_CPU_CYCLES
             int "Minimum timer period in CPU cycles"
@@ -103,27 +87,56 @@ menu "Time Synchronization Configuration"
                 At 240MHz CPU, 5000 cycles = 21us = 833 ticks at 40MHz timer.
     endmenu
 
-    menu "Master Configuration"
-        config FTS_MASTER_AP_MODE
-            bool "Master runs as Access Point"
-            default n
-            depends on FTS_ROLE_MASTER
+    # ========================================
+    # WIFI CONFIGURATION (Internal/External AP modes)
+    # ========================================
+    menu "WiFi Configuration"
+        depends on FTS_MODE_INTERNAL_AP || FTS_MODE_EXTERNAL_AP
+
+        config FTS_WIFI_SSID
+            string "WiFi SSID"
+            default "FTS_NETWORK"
             help
-                When enabled, master creates its own AP network.
-                When disabled (default), master connects to external WiFi
-                like slaves do. This allows all devices to be on the same
-                network with external services (MQTT, etc).
+                SSID of the WiFi network.
+                For Internal AP: name of the AP created by master.
+                For External AP: name of external network to connect to.
+
+        config FTS_WIFI_PASSWORD
+            string "WiFi Password"
+            default "fts-password"
+            help
+                Password for the WiFi network (min 8 characters)
 
         config FTS_AP_CHANNEL
             int "AP Channel"
             default 1
             range 1 13
-            depends on FTS_MASTER_AP_MODE
+            depends on FTS_MODE_INTERNAL_AP && FTS_ROLE_MASTER
             help
-                WiFi channel for master AP (only when AP mode is enabled)
+                WiFi channel for master AP (only when Internal AP mode)
     endmenu
 
-    menu "MQTT Configuration"
+    # ========================================
+    # ESP-NOW CONFIGURATION (USB-NCM mode)
+    # ========================================
+    menu "ESP-NOW Configuration"
+        depends on FTS_MODE_USB_NCM
+
+        config FTS_ESPNOW_CHANNEL
+            int "ESP-NOW Channel"
+            default 1
+            range 1 13
+            help
+                WiFi channel for ESP-NOW broadcast.
+                All devices (master and slaves) must use the same channel.
+    endmenu
+
+    # USB-NCM uses DHCP client (no configuration needed)
+
+    # ========================================
+    # MQTT TELEMETRY (all modes)
+    # ========================================
+    menu "MQTT Telemetry"
         config FTS_MQTT_ENABLED
             bool "Enable MQTT Telemetry"
             default n
@@ -137,7 +150,6 @@ menu "Time Synchronization Configuration"
             depends on FTS_MQTT_ENABLED
             help
                 URI of the MQTT broker (e.g., mqtt://192.168.1.100:1883).
-                For slave devices, this should be reachable from the master's AP network.
 
         config FTS_MQTT_DEVICE_ID
             string "MQTT Device ID"
@@ -153,8 +165,47 @@ menu "Time Synchronization Configuration"
             depends on FTS_MQTT_ENABLED && FTS_ROLE_SLAVE
             help
                 Enable receiving period corrections from RL engine via MQTT.
-                Only applicable to slave devices. When enabled, the device subscribes
-                to fts/{device_id}/control and applies received period corrections.
+                Only applicable to slave devices.
+    endmenu
+
+    # ========================================
+    # DEBUG / TEST OPTIONS
+    # ========================================
+    menu "Debug and Test Options"
+        config FTS_CSV_OUTPUT
+            bool "Enable CSV Debug Output"
+            default n
+            help
+                Enable CSV-formatted debug output for FTM and CRM data.
+                Useful for plotting and analysis, but clutters console.
+                Output format: FTM_UNWRAP,... and REGR,...
+
+        config FTS_MAC_TIMER_ALIGNMENT_TEST_CYCLES
+            int "Number of Test Cycles"
+            default 0
+            range 0 1000000
+            help
+                If not zero, enables test mode for MAC timer alignment measurement.
+                Device will measure MAC clock alignment and output results as CSV.
+                It will make given number of cycles and reboot.
+                Useful for automated testing and validation.
+
+        config FTS_TEST_ALIGN_ONCE
+            bool "Test Mode: Initial Alignment Only (No Re-alignment)"
+            default n
+            depends on FTS_ROLE_SLAVE
+            help
+                When enabled, slave performs initial alignment only and never re-aligns.
+                This tests how well the initial alignment routine works without continuous
+                corrections from subsequent FTM measurements.
+
+        config FTS_PULSE_BEFORE_ALIGN
+            bool "Enable Pulse Output Before Alignment (Slave)"
+            default n
+            depends on FTS_ROLE_SLAVE && FTS_ENABLE_GPIO
+            help
+                When enabled, slave outputs MCPWM pulses immediately after timer start,
+                before synchronization with master is acquired.
     endmenu
 
 endmenu

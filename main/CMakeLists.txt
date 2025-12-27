@@ -14,8 +14,17 @@ execute_process(
 
 set(MAIN_SRCS "fts_main.c")
 
-# Unified requirements for fts_main.c (both master and slave)
-set(COMPONENT_REQUIRES "esp_driver_mcpwm" "ftm" "dtr" "dtc" "fts_mqtt")
+# Component requirements for fts_main.c
+# Note: All components are included; unused ones are compiled out by preprocessor
+set(COMPONENT_REQUIRES
+    "esp_driver_mcpwm"
+    "dtr"
+    "dtc"
+    "ftm"
+    "fts_mqtt"
+    "esp_netif"
+    "esp_event"
+)
 
 idf_component_register(SRCS ${MAIN_SRCS}
                        INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"

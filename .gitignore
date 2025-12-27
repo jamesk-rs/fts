@@ -21,3 +21,4 @@ bin/config.local
 
 docs/fts-presa-extracted/
 fts-platform/backups/
+managed_components/

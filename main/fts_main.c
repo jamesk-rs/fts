@@ -10,10 +10,19 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_netif.h"
+#include "esp_event.h"
 #include "rom/ets_sys.h"
 #include "dtr.h"
-#include "ftm.h"
 #include "build_info.h"
+
+#if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP)
+#include "ftm.h"
+#endif
+
+#ifdef CONFIG_FTS_MODE_USB_NCM
+#include "usb_uplink.h"
+#endif
 
 #ifdef CONFIG_FTS_ROLE_SLAVE
 #include "crm.h"
@@ -83,8 +92,15 @@ void app_main(void)
 
 #ifdef CONFIG_FTS_ROLE_SLAVE
     // ========== SLAVE MODE ==========
-    // Initialize Wifi STA with FTM initiator (starts WiFi and MAC clock)
+
+#if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP)
+    // WiFi mode: Initialize WiFi STA with FTM initiator (starts WiFi and MAC clock)
     ESP_ERROR_CHECK(ftm_slave_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD));
+#elif defined(CONFIG_FTS_MODE_USB_NCM)
+    // USB-NCM mode: WiFi for ESP-NOW sync + FTM, USB for IP transport
+    ESP_ERROR_CHECK(ftm_slave_espnow_init(CONFIG_FTS_ESPNOW_CHANNEL));
+    ESP_ERROR_CHECK(usb_uplink_init());
+#endif
 
     // Initialize DTR (MCPWM timer hardware)
     ESP_ERROR_CHECK(dtr_init(DTR_MODE_SLAVE, fts_callback, TOGGLE_GPIO));
@@ -99,9 +115,13 @@ void app_main(void)
     ESP_ERROR_CHECK(dtc_init());
 
 #ifdef CONFIG_FTS_MQTT_ENABLED
-    // Wait for IP address before starting MQTT (max 10 seconds)
+    // Wait for IP address before starting MQTT
     ESP_LOGI(TAG, "Waiting for IP address...");
+#if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP)
     esp_err_t ip_err = ftm_wait_for_ip(10000);
+#elif defined(CONFIG_FTS_MODE_USB_NCM)
+    esp_err_t ip_err = usb_uplink_wait_for_ip(30000);  // USB may take longer
+#endif
     if (ip_err != ESP_OK) {
         ESP_LOGW(TAG, "Timeout waiting for IP, MQTT may fail initially");
     }
@@ -123,12 +143,17 @@ void app_main(void)
 
 #elif defined(CONFIG_FTS_ROLE_MASTER)
     // ========== MASTER MODE ==========
-#ifdef CONFIG_FTS_MASTER_AP_MODE
-    // AP mode: Master creates its own network
+
+#if defined(CONFIG_FTS_MODE_INTERNAL_AP)
+    // Internal AP mode: Master creates its own network
     ESP_ERROR_CHECK(ftm_master_ap_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD, CONFIG_FTS_AP_CHANNEL));
-#else
-    // STA mode (default): Master connects to external WiFi like slaves
+#elif defined(CONFIG_FTS_MODE_EXTERNAL_AP)
+    // External AP mode: Master connects to external WiFi like slaves
     ESP_ERROR_CHECK(ftm_master_sta_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD));
+#elif defined(CONFIG_FTS_MODE_USB_NCM)
+    // USB-NCM mode: WiFi for ESP-NOW sync + FTM responder, USB for IP transport
+    ESP_ERROR_CHECK(ftm_master_espnow_init(CONFIG_FTS_ESPNOW_CHANNEL));
+    ESP_ERROR_CHECK(usb_uplink_init());
 #endif
 
     // Initialize DTR (MCPWM timer hardware)
@@ -137,18 +162,25 @@ void app_main(void)
     // Start timer and measure MAC/timer relationship
     dtr_start_timer();
 
-    // Align timer to MAC clock epoch boundaries
+    // Align timer to MAC clock epoch boundaries (works in all modes - WiFi MAC clock available)
     dtr_align_master_timer();
 
 #ifdef CONFIG_FTS_MQTT_ENABLED
-#ifndef CONFIG_FTS_MASTER_AP_MODE
-    // Wait for IP address before starting MQTT (STA mode only)
+    // Wait for IP address before starting MQTT
+#if defined(CONFIG_FTS_MODE_EXTERNAL_AP)
     ESP_LOGI(TAG, "Waiting for IP address...");
     esp_err_t ip_err = ftm_wait_for_ip(10000);
     if (ip_err != ESP_OK) {
         ESP_LOGW(TAG, "Timeout waiting for IP, MQTT may fail initially");
     }
+#elif defined(CONFIG_FTS_MODE_USB_NCM)
+    ESP_LOGI(TAG, "Waiting for USB IP address...");
+    esp_err_t ip_err = usb_uplink_wait_for_ip(30000);  // USB may take longer
+    if (ip_err != ESP_OK) {
+        ESP_LOGW(TAG, "Timeout waiting for IP, MQTT may fail initially");
+    }
 #endif
+    // Note: Internal AP mode doesn't need IP wait - master has fixed IP
 
     // Initialize MQTT client for telemetry (master doesn't receive control)
     fts_mqtt_config_t mqtt_cfg = {
