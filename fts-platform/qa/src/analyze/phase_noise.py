@@ -10,12 +10,13 @@ from typing import Optional
 
 
 # Standard logarithmic frequency bins (Hz)
+# Note: 0.1 Hz requires >100s of data (we use 60s windows)
+# Note: 1000 Hz is exactly Nyquist for 2kHz pulse rate (edge case)
 LOG_FREQ_BINS = np.array([
-    0.1, 0.2, 0.5,
+    0.2, 0.5,
     1.0, 2.0, 5.0,
     10.0, 20.0, 50.0,
-    100.0, 200.0, 500.0,
-    1000.0
+    100.0, 200.0, 500.0
 ])
 
 

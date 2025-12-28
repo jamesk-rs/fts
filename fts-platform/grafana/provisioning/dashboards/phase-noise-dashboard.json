@@ -68,7 +68,7 @@
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({\n      _time: r._time,\n      \"0.1 Hz\": r.f_0p1,\n      \"0.2 Hz\": r.f_0p2,\n      \"0.5 Hz\": r.f_0p5,\n      \"1 Hz\": r.f_1,\n      \"2 Hz\": r.f_2,\n      \"5 Hz\": r.f_5,\n      \"10 Hz\": r.f_10,\n      \"20 Hz\": r.f_20,\n      \"50 Hz\": r.f_50,\n      \"100 Hz\": r.f_100,\n      \"200 Hz\": r.f_200,\n      \"500 Hz\": r.f_500,\n      \"1000 Hz\": r.f_1000\n    }))",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({\n      _time: r._time,\n      \"0.2 Hz\": r.f_0p2,\n      \"0.5 Hz\": r.f_0p5,\n      \"1 Hz\": r.f_1,\n      \"2 Hz\": r.f_2,\n      \"5 Hz\": r.f_5,\n      \"10 Hz\": r.f_10,\n      \"20 Hz\": r.f_20,\n      \"50 Hz\": r.f_50,\n      \"100 Hz\": r.f_100,\n      \"200 Hz\": r.f_200,\n      \"500 Hz\": r.f_500\n    }))",
           "refId": "A"
         }
       ]
@@ -351,7 +351,7 @@
     },
     {
       "datasource": { "type": "influxdb", "uid": "influxdb" },
-      "description": "L(f) at 1000 Hz offset over time",
+      "description": "L(f) at 500 Hz offset over time",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -359,7 +359,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "L(1000 Hz) [dBc/Hz]",
+            "axisLabel": "L(500 Hz) [dBc/Hz]",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -388,12 +388,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "L(1000 Hz) Over Time",
+      "title": "L(500 Hz) Over Time",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field == \"f_1000\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field == \"f_500\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
           "refId": "A"
         }
       ]
