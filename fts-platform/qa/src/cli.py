@@ -235,11 +235,9 @@ def cmd_capture(args):
 
 
 def cmd_stream_mqtt(args):
-    """Continuous capture with live MQTT publishing to RL engine"""
-    from collections import deque
+    """Continuous capture with live MQTT publishing and minute-aligned stats."""
     from capture.usrp import USRPCapture
-    from detect import StreamingCrossingDetector
-    from analyze.stats import compute_stats
+    from analyze.processor import ChunkProcessor
     from sdr_publisher import SDRPublisher
     import time
 
@@ -258,223 +256,67 @@ def cmd_stream_mqtt(args):
         print(f"Error: {e}")
         return 1
 
-    # Compute min_distance from pulse frequency
-    samples_per_period = args.sample_rate / args.pulse_freq
-    min_distance = int(samples_per_period * 0.4)
+    # Edge publishing callback (called from main thread for real-time publishing)
+    edges_published = [0]
 
-    # Initialize detectors (one per channel)
-    detector_a = StreamingCrossingDetector(
+    def on_edge(gpsdo_time, delay_ns, ch_a_ns, ch_b_ns):
+        if ch_a_ns is not None and ch_b_ns is not None:
+            publisher.publish_edge(channel_a_ns=ch_a_ns, channel_b_ns=ch_b_ns, timestamp=gpsdo_time)
+        elif ch_a_ns is not None:
+            publisher.publish_edge(channel_a_ns=ch_a_ns, timestamp=gpsdo_time)
+        elif ch_b_ns is not None:
+            publisher.publish_edge(channel_b_ns=ch_b_ns, timestamp=gpsdo_time)
+        edges_published[0] += 1
+
+    # Minute stats callback (called from processing thread)
+    stats_published = [0]
+
+    def on_minute_stats(bucket, stats):
+        channel_stats = {
+            'channel_a_edges': len(bucket.edges_a),
+            'channel_b_edges': len(bucket.edges_b),
+            'matched_count': stats.count,
+        }
+        publisher.publish_stats(stats.to_dict(), processor._overflow_count, channel_stats)
+        stats_published[0] += 1
+
+        print(f"[MINUTE {bucket.minute_str}] {stats.count} matched | "
+              f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns "
+              f"p50={stats.p50_ns:.1f}ns p99={stats.p99_ns:.1f}ns")
+
+    processor = ChunkProcessor(
+        sample_rate=args.sample_rate,
+        pulse_freq=args.pulse_freq,
         threshold=args.threshold,
-        min_distance=min_distance,
-        skip_samples=int(0.1 * args.sample_rate),  # Skip first 100ms
-    )
-    detector_b = StreamingCrossingDetector(
-        threshold=args.threshold,
-        min_distance=min_distance,
-        skip_samples=int(0.1 * args.sample_rate),
+        on_minute_stats=on_minute_stats,
+        on_edge=on_edge,
     )
 
-    # Rolling window for stats
-    WINDOW_SECONDS = 60.0
-
-    # Edge queues - two-pointer merge algorithm
-    queue_a = deque()  # Edge times in samples
-    queue_b = deque()
-
-    # Matching thresholds
-    max_match_delay = 0.1 / args.pulse_freq * args.sample_rate  # 10% of period
-    safety_buffer = 0.5 / args.pulse_freq * args.sample_rate    # 50% of period
-    # Expiration: edges waiting longer than this without a match are published as unmatched
-    expiration_samples = 2.0 / args.pulse_freq * args.sample_rate  # 2 periods
-
-    chunk_count = 0
-    start_time = time.time()
-    next_report_time = start_time + 10.0
-    edges_published = 0
-    stats_published = 0
-
-    # GPSDO time tracking - first chunk's time is our reference
-    gpsdo_start_time = None  # Will be set on first chunk
-
-    # Accumulate delays in rolling window for stats (avoid re-matching)
-    # Store (wall_clock_time, delay_array) tuples for time-based expiration
-    all_delay_batches = []
-
-    # Per-channel edge counts in current reporting window (10s)
-    window_edges_a = 0
-    window_edges_b = 0
-    window_matched = 0
-    window_unmatched_a = 0
-    window_unmatched_b = 0
-
-    def process_chunk(data, chunk_time):
-        nonlocal chunk_count, next_report_time, edges_published, stats_published
-        nonlocal all_delay_batches, gpsdo_start_time
-        nonlocal window_edges_a, window_edges_b, window_matched, window_unmatched_a, window_unmatched_b
-
-        # Track GPSDO start time from first chunk
-        if gpsdo_start_time is None:
-            gpsdo_start_time = chunk_time
-            print(f"  GPSDO start time: {gpsdo_start_time:.6f}s")
-
-        chan_a = data.real
-        chan_b = data.imag
-
-        # Detect edges in this chunk (returns Nx2 array: [[time, type], ...])
-        edges_a = detector_a.process(chan_a)
-        edges_b = detector_b.process(chan_b)
-
-        # Accumulate falling edges (type == 1)
-        falling_a = edges_a[edges_a[:, 1] == 1, 0] if len(edges_a) > 0 else np.array([])
-        falling_b = edges_b[edges_b[:, 1] == 1, 0] if len(edges_b) > 0 else np.array([])
-
-        # Track per-channel edge counts
-        window_edges_a += len(falling_a)
-        window_edges_b += len(falling_b)
-
-        # Add new edges to queues
-        queue_a.extend(falling_a.tolist())
-        queue_b.extend(falling_b.tolist())
-
-        chunk_count += 1
-
-        # Two-pointer merge with expiration: match edges, expire stale ones
-        # Collect delays for this batch
-        batch_delays = []
-
-        # Helper to compute GPSDO timestamp from sample index
-        def edge_timestamp(sample_idx):
-            """Convert sample index to absolute GPSDO timestamp."""
-            return gpsdo_start_time + (sample_idx / args.sample_rate)
-
-        # First, handle single-queue expiration (when one channel is down)
-        # This ensures we don't accumulate edges indefinitely
-        if queue_a and not queue_b:
-            # Only A has edges - expire old ones as unmatched
-            while queue_a and len(queue_a) > 1:
-                a = queue_a.popleft()
-                ch_a_ns = int(a / args.sample_rate * 1e9)
-                if publisher.publish_edge(channel_a_ns=ch_a_ns, timestamp=edge_timestamp(a)):
-                    edges_published += 1
-                    window_unmatched_a += 1
-
-        if queue_b and not queue_a:
-            # Only B has edges - expire old ones as unmatched
-            while queue_b and len(queue_b) > 1:
-                b = queue_b.popleft()
-                ch_b_ns = int(b / args.sample_rate * 1e9)
-                if publisher.publish_edge(channel_b_ns=ch_b_ns, timestamp=edge_timestamp(b)):
-                    edges_published += 1
-                    window_unmatched_b += 1
-
-        # Normal two-pointer merge when both queues have data
-        if queue_a and queue_b:
-            newest = max(queue_a[-1], queue_b[-1])
-            safe_cutoff = newest - safety_buffer
-
-            while queue_a and queue_b:
-                a = queue_a[0]
-                b = queue_b[0]
-
-                # Don't process edges too close to newest data
-                if a > safe_cutoff or b > safe_cutoff:
-                    break
-
-                diff = b - a  # positive = B is later
-
-                if abs(diff) <= max_match_delay:
-                    # Match - publish with both channels
-                    queue_a.popleft()
-                    queue_b.popleft()
-                    ch_a_ns = int(a / args.sample_rate * 1e9)
-                    ch_b_ns = int(b / args.sample_rate * 1e9)
-                    # Use channel A's timestamp as the edge timestamp
-                    if publisher.publish_edge(channel_a_ns=ch_a_ns, channel_b_ns=ch_b_ns,
-                                              timestamp=edge_timestamp(a)):
-                        edges_published += 1
-                        window_matched += 1
-                    # Store delay in seconds for stats
-                    batch_delays.append(diff / args.sample_rate)
-                elif diff > 0:
-                    # B is later than A - A missed its match
-                    queue_a.popleft()
-                    ch_a_ns = int(a / args.sample_rate * 1e9)
-                    if publisher.publish_edge(channel_a_ns=ch_a_ns, timestamp=edge_timestamp(a)):
-                        edges_published += 1
-                        window_unmatched_a += 1
-                else:
-                    # A is later than B - B missed its match
-                    queue_b.popleft()
-                    ch_b_ns = int(b / args.sample_rate * 1e9)
-                    if publisher.publish_edge(channel_b_ns=ch_b_ns, timestamp=edge_timestamp(b)):
-                        edges_published += 1
-                        window_unmatched_b += 1
-
-        # Save delays for stats
-        if batch_delays:
-            all_delay_batches.append((time.time(), np.array(batch_delays)))
-
-        # Report every 10 seconds
-        now = time.time()
-        if now > next_report_time:
-            # t0 = time.perf_counter()
-            elapsed = now - start_time
-            samples = detector_a.samples_processed
-
-            # Expire old delay batches (time-based rolling window)
-            cutoff = now - WINDOW_SECONDS
-            all_delay_batches = [(t, d) for t, d in all_delay_batches if t > cutoff]
-
-            # Combine remaining delays
-            if all_delay_batches:
-                combined_delays = np.concatenate([d for _, d in all_delay_batches])
-            else:
-                combined_delays = np.array([])
-
-            # Compute per-channel stats for this window
-            channel_stats = {
-                'channel_a_edges': window_edges_a,
-                'channel_b_edges': window_edges_b,
-                'matched_count': window_matched,
-            }
-
-            # Compute jitter stats from accumulated delays (no re-matching!)
-            if len(combined_delays) > 10:
-                stats = compute_stats(combined_delays, args.pulse_freq)
-                # Publish stats to MQTT with per-channel info
-                if publisher.publish_stats(stats.to_dict(), capture._overflow_count, channel_stats):
-                    stats_published += 1
-                print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples | "
-                      f"detected: A={window_edges_a} B={window_edges_b} | "
-                      f"queues: A={len(queue_a)} B={len(queue_b)} | "
-                      f"published: matched={window_matched} unmatchedA={window_unmatched_a} unmatchedB={window_unmatched_b} | "
-                      f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns | ovf={capture._overflow_count}")
-            else:
-                # Publish stats even without delays to show channel health
-                publisher.publish_stats({}, capture._overflow_count, channel_stats)
-                print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples | "
-                      f"detected: A={window_edges_a} B={window_edges_b} | "
-                      f"queues: A={len(queue_a)} B={len(queue_b)} | "
-                      f"published: matched={window_matched} unmatchedA={window_unmatched_a} unmatchedB={window_unmatched_b} | "
-                      f"delays={len(combined_delays)} | ovf={capture._overflow_count}")
-
-            # Reset window counters
-            window_edges_a = 0
-            window_edges_b = 0
-            window_matched = 0
-            window_unmatched_a = 0
-            window_unmatched_b = 0
-            next_report_time += 10.0
-
-        return True  # Continue streaming
-
-    # Start capture
     capture = USRPCapture(
         sample_rate=args.sample_rate,
         freq=args.freq,
         gain=args.gain,
         addr=args.usrp_addr,
     )
+
+    # Timing for 10s status reports
+    start_time = time.time()
+    next_report_time = start_time + 10.0
+    last_status = processor.get_status()
+
+    def process_chunk(data, chunk_time):
+        nonlocal next_report_time, last_status
+
+        processor.process(data, chunk_time)
+        processor.set_overflow_count(capture._overflow_count)
+
+        # Report every 10 seconds
+        now = time.time()
+        if now > next_report_time:
+            last_status = processor.print_status(now - start_time, last_status)
+            next_report_time += 10.0
+
+        return True  # Continue streaming
 
     try:
         capture.stream_threaded(
@@ -486,127 +328,68 @@ def cmd_stream_mqtt(args):
     except KeyboardInterrupt:
         print("\nStopped by user.")
     finally:
+        processor.flush()
+        processor.stop()
         publisher.close()
 
-    # Final stats (from accumulated delays)
-    print("\n--- Final Statistics (rolling window) ---")
-    combined_delays = np.concatenate([d for _, d in all_delay_batches]) if all_delay_batches else np.array([])
-
-    print(f"Total samples: {detector_a.samples_processed:,}")
-    print(f"Total edges published: {edges_published}")
-    print(f"Total stats published: {stats_published}")
-    print(f"UHD overflows: {capture._overflow_count}")
-
-    if len(combined_delays) > 0:
-        stats = compute_stats(combined_delays, args.pulse_freq)
-        print(f"Window delays: {len(combined_delays)}")
-        print(stats)
-    else:
-        print("No delays captured.")
+    # Final stats
+    processor.print_final_stats()
+    print(f"Edges published: {edges_published[0]}")
+    print(f"Stats published: {stats_published[0]}")
 
     return 0
 
 
 def cmd_stream(args):
-    """Continuous capture with live jitter analysis"""
+    """Continuous capture with live jitter analysis (per-minute stats)."""
     from capture.usrp import USRPCapture
-    from detect import StreamingCrossingDetector
-    from analyze import match_edges
-    from analyze.stats import compute_stats
+    from analyze.processor import ChunkProcessor
     import time
 
+    duration_str = f"{args.duration}s" if args.duration else "indefinite (Ctrl+C to stop)"
     print(f"Streaming capture with live jitter analysis...")
-    print(f"  Duration: {args.duration}s")
+    print(f"  Duration: {duration_str}")
     print(f"  Sample rate: {args.sample_rate/1e6:.1f} MSps")
     print(f"  Pulse freq: {args.pulse_freq} Hz")
     print(f"  Threshold: {args.threshold}")
 
-    # Compute min_distance from pulse frequency
-    samples_per_period = args.sample_rate / args.pulse_freq
-    min_distance = int(samples_per_period * 0.4)
+    # Minute stats callback (called from processing thread)
+    def on_minute_stats(bucket, stats):
+        print(f"[MINUTE {bucket.minute_str}] {len(bucket.edges_a)} matched | "
+              f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns "
+              f"p50={stats.p50_ns:.1f}ns p99={stats.p99_ns:.1f}ns")
 
-    # Initialize detectors (one per channel)
-    detector_a = StreamingCrossingDetector(
+    processor = ChunkProcessor(
+        sample_rate=args.sample_rate,
+        pulse_freq=args.pulse_freq,
         threshold=args.threshold,
-        min_distance=min_distance,
-        skip_samples=int(0.1 * args.sample_rate),  # Skip first 100ms
-    )
-    detector_b = StreamingCrossingDetector(
-        threshold=args.threshold,
-        min_distance=min_distance,
-        skip_samples=int(0.1 * args.sample_rate),
+        on_minute_stats=on_minute_stats,
     )
 
-    # Accumulators for edges (use falling edges - more reliable for AC-coupled)
-    all_falling_a = []
-    all_falling_b = []
-
-    chunk_count = 0
-    start_time = time.time()
-    last_report_time = start_time
-
-    def process_chunk(data, chunk_time):
-        nonlocal chunk_count, last_report_time
-
-        # chunk_time is GPSDO time (not used here, but required by callback signature)
-        _ = chunk_time
-
-        chan_a = data.real
-        chan_b = data.imag
-
-        # Detect edges in this chunk (returns Nx2 array: [[time, type], ...])
-        edges_a = detector_a.process(chan_a)
-        edges_b = detector_b.process(chan_b)
-
-        # Accumulate falling edges (type == 1)
-        falling_a = edges_a[edges_a[:, 1] == 1, 0] if len(edges_a) > 0 else np.array([])
-        falling_b = edges_b[edges_b[:, 1] == 1, 0] if len(edges_b) > 0 else np.array([])
-        if len(falling_a) > 0:
-            all_falling_a.append(falling_a)
-        if len(falling_b) > 0:
-            all_falling_b.append(falling_b)
-
-        chunk_count += 1
-
-        # Report every second
-        now = time.time()
-        if now - last_report_time >= 1.0:
-            elapsed = now - start_time
-            samples = detector_a.samples_processed
-            n_falling_a = sum(len(x) for x in all_falling_a)
-            n_falling_b = sum(len(x) for x in all_falling_b)
-
-            # Compute jitter stats if we have enough edges
-            if n_falling_a > 10 and n_falling_b > 10:
-                times_a = np.concatenate(all_falling_a) if all_falling_a else np.array([])
-                times_b = np.concatenate(all_falling_b) if all_falling_b else np.array([])
-                _, _, delays = match_edges(times_a, times_b, args.sample_rate)
-
-                if len(delays) > 0:
-                    stats = compute_stats(delays, args.pulse_freq)
-                    print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                          f"{len(delays)} edges, "
-                          f"mean={stats.mean_ns:+.1f}ns, "
-                          f"std={stats.std_ns:.1f}ns, "
-                          f"min={stats.min_ns:.1f}ns, "
-                          f"max={stats.max_ns:.1f}ns")
-                else:
-                    print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                          f"edges: A={n_falling_a}, B={n_falling_b} (no matches yet)")
-            else:
-                print(f"[{elapsed:5.1f}s] {samples/1e6:.1f}M samples, "
-                      f"edges: A={n_falling_a}, B={n_falling_b}")
-
-            last_report_time = now
-
-        return True  # Continue streaming
-
-    # Start capture
     capture = USRPCapture(
         sample_rate=args.sample_rate,
         freq=args.freq,
         gain=args.gain,
     )
+
+    # Timing for 10s status reports
+    start_time = time.time()
+    next_report_time = start_time + 10.0
+    last_status = processor.get_status()
+
+    def process_chunk(data, chunk_time):
+        nonlocal next_report_time, last_status
+
+        processor.process(data, chunk_time)
+        processor.set_overflow_count(capture._overflow_count)
+
+        # Report every 10 seconds
+        now = time.time()
+        if now > next_report_time:
+            last_status = processor.print_status(now - start_time, last_status)
+            next_report_time += 10.0
+
+        return True  # Continue streaming
 
     try:
         capture.stream(
@@ -616,22 +399,11 @@ def cmd_stream(args):
         )
     except KeyboardInterrupt:
         print("\nStopped by user.")
+    finally:
+        processor.flush()
+        processor.stop()
 
-    # Final stats
-    print("\n--- Final Statistics ---")
-    times_a = np.concatenate(all_falling_a) if all_falling_a else np.array([])
-    times_b = np.concatenate(all_falling_b) if all_falling_b else np.array([])
-
-    if len(times_a) > 0 and len(times_b) > 0:
-        _, _, delays = match_edges(times_a, times_b, args.sample_rate)
-        if len(delays) > 0:
-            stats = compute_stats(delays, args.pulse_freq)
-            print(f"Total samples: {detector_a.samples_processed:,}")
-            print(f"Total edge pairs: {len(delays)}")
-            print(stats)
-    else:
-        print("No edges detected.")
-
+    processor.print_final_stats()
     return 0
 
 
