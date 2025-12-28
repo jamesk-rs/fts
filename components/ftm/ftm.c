@@ -464,9 +464,9 @@ static esp_err_t ftm_sync_slave_init(void)
 static void ftm_espnow_recv_cb(const esp_now_recv_info_t *info,
                                 const uint8_t *data, int len)
 {
-    ESP_LOGI(TAG, "ESP-NOW RX: %d bytes from %02x:%02x:%02x:%02x:%02x:%02x",
-             len, info->src_addr[0], info->src_addr[1], info->src_addr[2],
-             info->src_addr[3], info->src_addr[4], info->src_addr[5]);
+    // ESP_LOGI(TAG, "ESP-NOW RX: %d bytes from %02x:%02x:%02x:%02x:%02x:%02x",
+    //          len, info->src_addr[0], info->src_addr[1], info->src_addr[2],
+    //          info->src_addr[3], info->src_addr[4], info->src_addr[5]);
 
     if (len != sizeof(ftm_sync_packet_t)) {
         ESP_LOGW(TAG, "ESP-NOW: wrong size %d (expected %d)", len, (int)sizeof(ftm_sync_packet_t));
