@@ -13,6 +13,12 @@ allow_anonymous true
 
 persistence true
 persistence_location /mosquitto/data/
+autosave_interval 60
+
+# Queue settings for bridge (when cloud is down)
+# 0 = unlimited (bounded by disk space only)
+max_queued_messages 0
+max_queued_bytes 0
 
 log_dest file /mosquitto/log/mosquitto.log
 log_dest stdout
