@@ -284,9 +284,10 @@ def cmd_stream_mqtt(args):
         if phase_noise is not None:
             publisher.publish_phase_noise(phase_noise.to_dict(), bucket.start_time)
 
+        rms_str = f" | rms_jitter={phase_noise.rms_jitter_ns:.2f}ns" if phase_noise else ""
         print(f"[MINUTE {bucket.minute_str}] {stats.count} matched | "
               f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns "
-              f"p50={stats.p50_ns:.1f}ns p99={stats.p99_ns:.1f}ns")
+              f"p50={stats.p50_ns:.1f}ns p99={stats.p99_ns:.1f}ns{rms_str}")
 
     processor = ChunkProcessor(
         sample_rate=args.sample_rate,
@@ -359,9 +360,10 @@ def cmd_stream(args):
 
     # Minute stats callback (called from processing thread)
     def on_minute_stats(bucket, stats, phase_noise):
+        rms_str = f" | rms_jitter={phase_noise.rms_jitter_ns:.2f}ns" if phase_noise else ""
         print(f"[MINUTE {bucket.minute_str}] {len(bucket.edges_a)} matched | "
               f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns "
-              f"p50={stats.p50_ns:.1f}ns p99={stats.p99_ns:.1f}ns")
+              f"p50={stats.p50_ns:.1f}ns p99={stats.p99_ns:.1f}ns{rms_str}")
 
     processor = ChunkProcessor(
         sample_rate=args.sample_rate,
