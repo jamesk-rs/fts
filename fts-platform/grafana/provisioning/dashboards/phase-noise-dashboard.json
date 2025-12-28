@@ -59,10 +59,10 @@
         "orientation": "vertical",
         "showValue": "always",
         "stacking": "none",
-        "tooltip": { "mode": "single", "sort": "none" },
+        "tooltip": { "mode": "multi", "sort": "none" },
         "xField": "Frequency",
-        "xTickLabelRotation": -45,
-        "xTickLabelSpacing": 0
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 100
       },
       "title": "Phase Noise Spectrum (Latest)",
       "type": "barchart",
@@ -78,7 +78,7 @@
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> map(fn: (r) => ({\n      _time: r._time,\n      freq_order: if r._field == \"f_0p2\" then 1\n        else if r._field == \"f_0p5\" then 2\n        else if r._field == \"f_1\" then 3\n        else if r._field == \"f_2\" then 4\n        else if r._field == \"f_5\" then 5\n        else if r._field == \"f_10\" then 6\n        else if r._field == \"f_20\" then 7\n        else if r._field == \"f_50\" then 8\n        else if r._field == \"f_100\" then 9\n        else if r._field == \"f_200\" then 10\n        else 11,\n      Frequency: if r._field == \"f_0p2\" then \"0.2 Hz\"\n        else if r._field == \"f_0p5\" then \"0.5 Hz\"\n        else if r._field == \"f_1\" then \"1 Hz\"\n        else if r._field == \"f_2\" then \"2 Hz\"\n        else if r._field == \"f_5\" then \"5 Hz\"\n        else if r._field == \"f_10\" then \"10 Hz\"\n        else if r._field == \"f_20\" then \"20 Hz\"\n        else if r._field == \"f_50\" then \"50 Hz\"\n        else if r._field == \"f_100\" then \"100 Hz\"\n        else if r._field == \"f_200\" then \"200 Hz\"\n        else \"500 Hz\",\n      \"L(f) dBc/Hz\": r._value\n    }))\n  |> group()\n  |> sort(columns: [\"freq_order\"])",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> map(fn: (r) => ({\n      freq_order: if r._field == \"f_0p2\" then 1\n        else if r._field == \"f_0p5\" then 2\n        else if r._field == \"f_1\" then 3\n        else if r._field == \"f_2\" then 4\n        else if r._field == \"f_5\" then 5\n        else if r._field == \"f_10\" then 6\n        else if r._field == \"f_20\" then 7\n        else if r._field == \"f_50\" then 8\n        else if r._field == \"f_100\" then 9\n        else if r._field == \"f_200\" then 10\n        else 11,\n      Frequency: if r._field == \"f_0p2\" then \"0.2 Hz\"\n        else if r._field == \"f_0p5\" then \"0.5 Hz\"\n        else if r._field == \"f_1\" then \"1 Hz\"\n        else if r._field == \"f_2\" then \"2 Hz\"\n        else if r._field == \"f_5\" then \"5 Hz\"\n        else if r._field == \"f_10\" then \"10 Hz\"\n        else if r._field == \"f_20\" then \"20 Hz\"\n        else if r._field == \"f_50\" then \"50 Hz\"\n        else if r._field == \"f_100\" then \"100 Hz\"\n        else if r._field == \"f_200\" then \"200 Hz\"\n        else \"500 Hz\",\n      \"L(f) dBc/Hz\": r._value\n    }))\n  |> group()\n  |> sort(columns: [\"freq_order\"])",
           "refId": "A"
         }
       ]
