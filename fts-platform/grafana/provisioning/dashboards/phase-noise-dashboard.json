@@ -41,12 +41,7 @@
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "dB"
         },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "freq_order" },
-            "properties": [{ "id": "custom.hideFrom", "value": { "legend": true, "tooltip": true, "viz": true } }]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 1 },
       "id": 1,
@@ -60,26 +55,67 @@
         "showValue": "always",
         "stacking": "none",
         "tooltip": { "mode": "multi", "sort": "none" },
-        "xField": "Frequency",
         "xTickLabelRotation": 0,
         "xTickLabelSpacing": 100
       },
       "title": "Phase Noise Spectrum (Latest)",
       "type": "barchart",
-      "transformations": [
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [{ "field": "freq_order", "desc": false }]
-          }
-        }
-      ],
+      "transformations": [],
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> map(fn: (r) => ({\n      freq_order: if r._field == \"f_0p2\" then 1\n        else if r._field == \"f_0p5\" then 2\n        else if r._field == \"f_1\" then 3\n        else if r._field == \"f_2\" then 4\n        else if r._field == \"f_5\" then 5\n        else if r._field == \"f_10\" then 6\n        else if r._field == \"f_20\" then 7\n        else if r._field == \"f_50\" then 8\n        else if r._field == \"f_100\" then 9\n        else if r._field == \"f_200\" then 10\n        else 11,\n      Frequency: if r._field == \"f_0p2\" then \"0.2 Hz\"\n        else if r._field == \"f_0p5\" then \"0.5 Hz\"\n        else if r._field == \"f_1\" then \"1 Hz\"\n        else if r._field == \"f_2\" then \"2 Hz\"\n        else if r._field == \"f_5\" then \"5 Hz\"\n        else if r._field == \"f_10\" then \"10 Hz\"\n        else if r._field == \"f_20\" then \"20 Hz\"\n        else if r._field == \"f_50\" then \"50 Hz\"\n        else if r._field == \"f_100\" then \"100 Hz\"\n        else if r._field == \"f_200\" then \"200 Hz\"\n        else \"500 Hz\",\n      \"L(f) dBc/Hz\": r._value\n    }))\n  |> group()\n  |> sort(columns: [\"freq_order\"])",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_0p2\") |> last() |> yield(name: \"0.2 Hz\")",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_0p5\") |> last() |> yield(name: \"0.5 Hz\")",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_1\") |> last() |> yield(name: \"1 Hz\")",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_2\") |> last() |> yield(name: \"2 Hz\")",
+          "refId": "D"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_5\") |> last() |> yield(name: \"5 Hz\")",
+          "refId": "E"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_10\") |> last() |> yield(name: \"10 Hz\")",
+          "refId": "F"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_20\") |> last() |> yield(name: \"20 Hz\")",
+          "refId": "G"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_50\") |> last() |> yield(name: \"50 Hz\")",
+          "refId": "H"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_100\") |> last() |> yield(name: \"100 Hz\")",
+          "refId": "I"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_200\") |> last() |> yield(name: \"200 Hz\")",
+          "refId": "J"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_500\") |> last() |> yield(name: \"500 Hz\")",
+          "refId": "K"
         }
       ]
     },
