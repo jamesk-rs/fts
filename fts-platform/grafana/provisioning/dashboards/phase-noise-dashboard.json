@@ -66,6 +66,24 @@
           "options": {
             "reducers": ["lastNotNull"]
           }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "0.2 Hz": 0,
+              "0.5 Hz": 1,
+              "1 Hz": 2,
+              "2 Hz": 3,
+              "5 Hz": 4,
+              "10 Hz": 5,
+              "20 Hz": 6,
+              "50 Hz": 7,
+              "100 Hz": 8,
+              "200 Hz": 9,
+              "500 Hz": 10
+            }
+          }
         }
       ],
       "targets": [
