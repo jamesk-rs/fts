@@ -22,6 +22,7 @@ set(COMPONENT_REQUIRES
     "dtc"
     "ftm"
     "fts_mqtt"
+    "usb_uplink"
     "esp_netif"
     "esp_event"
 )

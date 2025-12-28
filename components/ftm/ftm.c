@@ -262,6 +262,22 @@ static esp_err_t ftm_sync_master_espnow_init(uint8_t channel)
     ESP_LOGI(TAG, "Sync master init (ESP-NOW): run_id=0x%08lx, channel=%d",
              (unsigned long)s_run_id, channel);
 
+    // Add broadcast peer (required for ESP-NOW send to work)
+    static const uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    esp_now_peer_info_t peer_info = {
+        .channel = channel,
+        .ifidx = WIFI_IF_AP,
+        .encrypt = false,
+    };
+    memcpy(peer_info.peer_addr, broadcast_mac, 6);
+
+    esp_err_t ret = esp_now_add_peer(&peer_info);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to add broadcast peer: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ESP_LOGI(TAG, "Added broadcast peer for ESP-NOW");
+
     // Start broadcast task
     BaseType_t xret = xTaskCreate(
         ftm_espnow_broadcast_task,
@@ -448,7 +464,12 @@ static esp_err_t ftm_sync_slave_init(void)
 static void ftm_espnow_recv_cb(const esp_now_recv_info_t *info,
                                 const uint8_t *data, int len)
 {
+    ESP_LOGI(TAG, "ESP-NOW RX: %d bytes from %02x:%02x:%02x:%02x:%02x:%02x",
+             len, info->src_addr[0], info->src_addr[1], info->src_addr[2],
+             info->src_addr[3], info->src_addr[4], info->src_addr[5]);
+
     if (len != sizeof(ftm_sync_packet_t)) {
+        ESP_LOGW(TAG, "ESP-NOW: wrong size %d (expected %d)", len, (int)sizeof(ftm_sync_packet_t));
         return;
     }
 
@@ -688,9 +709,10 @@ static void slave_ftm_poll_task(void *pvParameters)
 
         // Inner loop: run FTM sessions while connected
         while (1) {
+            EventBits_t bits;
 #ifndef CONFIG_FTS_MODE_USB_NCM
             // Check if still connected (only in WiFi modes)
-            EventBits_t bits = xEventGroupGetBits(s_ftm_event_group);
+            bits = xEventGroupGetBits(s_ftm_event_group);
             if (!(bits & FTM_GOT_IP_BIT)) {
                 ESP_LOGI(TAG, "WiFi disconnected, pausing FTM sessions");
                 break;  // Back to outer wait loop
@@ -1154,8 +1176,12 @@ esp_err_t ftm_slave_espnow_init(uint8_t channel)
     ESP_LOGI(TAG, "Slave ESP-NOW: MAC=%02x:%02x:%02x:%02x:%02x:%02x, channel=%d",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], channel);
 
-    // Register FTM event handler
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    // Register FTM event handler (event loop may already exist from USB init)
+    esp_err_t evt_ret = esp_event_loop_create_default();
+    if (evt_ret != ESP_OK && evt_ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to create event loop: %s", esp_err_to_name(evt_ret));
+        return evt_ret;
+    }
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_FTM_REPORT,
                                                 &slave_ftm_event_handler, NULL));
 

@@ -11,6 +11,7 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_mac.h"
+#include "nvs_flash.h"
 #include "tinyusb.h"
 #include "tinyusb_net.h"
 #include "freertos/FreeRTOS.h"
@@ -41,9 +42,12 @@ static esp_err_t usb_recv_callback(void *buffer, uint16_t len, void *ctx)
         if (buf_copy) {
             memcpy(buf_copy, buffer, len);
             esp_err_t ret = esp_netif_receive(s_usb_netif, buf_copy, len, NULL);
+            // ESP_LOGI(TAG, "esp_netif_receive returned: %s", esp_err_to_name(ret));
             if (ret != ESP_OK) {
                 free(buf_copy);
             }
+        } else {
+            ESP_LOGE(TAG, "Failed to allocate buffer for RX");
         }
     }
     return ESP_OK;
@@ -75,11 +79,15 @@ static void usb_netif_free_rx_buffer(void *h, void *buffer)
 static void usb_ip_event_handler(void *arg, esp_event_base_t event_base,
                                   int32_t event_id, void *event_data)
 {
+    ESP_LOGI(TAG, "IP event: base=%s, id=%ld", event_base, (long)event_id);
+
     if (event_base != IP_EVENT) {
         return;
     }
 
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+
+    ESP_LOGI(TAG, "IP event netif=%p, our netif=%p", event->esp_netif, s_usb_netif);
 
     // Check if this event is for our USB netif
     if (event->esp_netif != s_usb_netif) {
@@ -105,30 +113,28 @@ esp_err_t usb_uplink_init(void)
 {
     ESP_LOGI(TAG, "Initializing USB NCM uplink...");
 
-    // Create event group
-    s_usb_event_group = xEventGroupCreate();
-    if (!s_usb_event_group) {
-        ESP_LOGE(TAG, "Failed to create event group");
-        return ESP_ERR_NO_MEM;
-    }
+    esp_err_t ret;
 
-    // Initialize TinyUSB driver
+    // Initialize TinyUSB driver FIRST (like the example does)
+    ESP_LOGI(TAG, "Installing TinyUSB driver...");
     const tinyusb_config_t tusb_cfg = {
         .external_phy = false,
     };
-    esp_err_t ret = tinyusb_driver_install(&tusb_cfg);
+    ret = tinyusb_driver_install(&tusb_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to install TinyUSB driver: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    // Get MAC address - derive from WiFi STA MAC with local admin bit set
+    // Get MAC address
     uint8_t mac_addr[6];
     esp_read_mac(mac_addr, ESP_MAC_WIFI_STA);
-    // Set locally administered bit, clear multicast bit
-    mac_addr[0] = (mac_addr[0] | 0x02) & 0xFE;
+    ESP_LOGI(TAG, "USB MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+             mac_addr[0], mac_addr[1], mac_addr[2],
+             mac_addr[3], mac_addr[4], mac_addr[5]);
 
     // Configure TinyUSB network with receive callback
+    ESP_LOGI(TAG, "Initializing TinyUSB NCM...");
     tinyusb_net_config_t net_config = {
         .on_recv_callback = usb_recv_callback,
         .user_context = NULL,
@@ -141,42 +147,31 @@ esp_err_t usb_uplink_init(void)
         return ret;
     }
 
-    // Create esp_netif driver configuration
-    esp_netif_driver_ifconfig_t driver_cfg = {
-        .transmit = usb_netif_transmit,
-        .driver_free_rx_buffer = usb_netif_free_rx_buffer,
-        .handle = NULL,
-    };
+    ESP_LOGI(TAG, "TinyUSB NCM initialized successfully");
 
-    // Create esp_netif inherent configuration - DHCP client mode
-    esp_netif_inherent_config_t base_cfg = {
-        .flags = ESP_NETIF_DHCP_CLIENT | ESP_NETIF_FLAG_AUTOUP |
-                 ESP_NETIF_FLAG_EVENT_IP_MODIFIED,
-        .ip_info = NULL,  // Will be assigned by DHCP
-        .get_ip_event = IP_EVENT_ETH_GOT_IP,
-        .lost_ip_event = IP_EVENT_ETH_LOST_IP,
-        .if_key = "USB_NCM",
-        .if_desc = "usb ncm uplink",
-        .route_prio = 50,  // Lower than WiFi STA (100)
-    };
-
-    // Use default Ethernet stack config (USB-NCM is Ethernet-like from lwIP perspective)
-    esp_netif_config_t cfg = {
-        .base = &base_cfg,
-        .driver = &driver_cfg,
-        .stack = ESP_NETIF_NETSTACK_DEFAULT_ETH,
-    };
-
-    s_usb_netif = esp_netif_new(&cfg);
-    if (!s_usb_netif) {
-        ESP_LOGE(TAG, "Failed to create USB netif");
-        return ESP_FAIL;
+    // Create event group for tracking connection state
+    s_usb_event_group = xEventGroupCreate();
+    if (!s_usb_event_group) {
+        ESP_LOGE(TAG, "Failed to create event group");
+        return ESP_ERR_NO_MEM;
     }
 
-    // Set MAC address on netif
-    esp_netif_set_mac(s_usb_netif, mac_addr);
+    // Initialize esp_netif
+    ESP_LOGI(TAG, "Setting up esp_netif...");
+    ret = esp_netif_init();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to init esp_netif: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
-    // Register IP event handler
+    // Create event loop
+    ret = esp_event_loop_create_default();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to create event loop: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Register IP event handler BEFORE creating netif
     ret = esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID,
                                       &usb_ip_event_handler, NULL);
     if (ret != ESP_OK) {
@@ -184,16 +179,41 @@ esp_err_t usb_uplink_init(void)
         return ret;
     }
 
-    // Attach driver to netif (manual attach since we have custom driver)
-    esp_netif_attach(s_usb_netif, NULL);
+    // Create esp_netif configuration for USB NCM (similar to ethernet)
+    esp_netif_inherent_config_t base_netif_cfg = ESP_NETIF_INHERENT_DEFAULT_ETH();
+    base_netif_cfg.if_key = "USB_NCM";
+    base_netif_cfg.if_desc = "usb_ncm";
+    base_netif_cfg.route_prio = 50;
 
-    // Start the interface - this will bring up the link and start DHCP
+    esp_netif_driver_ifconfig_t driver_cfg = {
+        .transmit = usb_netif_transmit,
+        .driver_free_rx_buffer = usb_netif_free_rx_buffer,
+        .handle = (void *)1,  // Non-NULL handle required
+    };
+
+    esp_netif_config_t netif_cfg = {
+        .base = &base_netif_cfg,
+        .driver = &driver_cfg,
+        .stack = ESP_NETIF_NETSTACK_DEFAULT_ETH,
+    };
+
+    s_usb_netif = esp_netif_new(&netif_cfg);
+    if (!s_usb_netif) {
+        ESP_LOGE(TAG, "Failed to create esp_netif");
+        return ESP_FAIL;
+    }
+
+    // Set MAC address
+    esp_netif_set_mac(s_usb_netif, mac_addr);
+
+    // Start the network interface (brings up link and starts DHCP)
     esp_netif_action_start(s_usb_netif, NULL, 0, NULL);
+    esp_netif_action_connected(s_usb_netif, NULL, 0, NULL);
 
-    ESP_LOGI(TAG, "USB NCM uplink initialized, MAC=%02x:%02x:%02x:%02x:%02x:%02x",
+    ESP_LOGI(TAG, "USB NCM uplink ready - MAC=%02x:%02x:%02x:%02x:%02x:%02x",
              mac_addr[0], mac_addr[1], mac_addr[2],
              mac_addr[3], mac_addr[4], mac_addr[5]);
-    ESP_LOGI(TAG, "Waiting for USB host connection and DHCP...");
+    ESP_LOGI(TAG, "Waiting for DHCP...");
 
     return ESP_OK;
 }

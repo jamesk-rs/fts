@@ -13,10 +13,11 @@
 #include "esp_netif.h"
 #include "esp_event.h"
 #include "rom/ets_sys.h"
+#include "nvs_flash.h"
 #include "dtr.h"
 #include "build_info.h"
 
-#if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP)
+#if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP) || defined(CONFIG_FTS_MODE_USB_NCM)
 #include "ftm.h"
 #endif
 
@@ -72,6 +73,20 @@ static void IRAM_ATTR fts_callback(uint32_t master_cycle)
 
 void app_main(void)
 {
+#ifdef CONFIG_FTS_MODE_USB_NCM
+    // USB-NCM mode: Initialize USB FIRST - before anything else including NVS
+    // Some boards (e.g., Waveshare) need USB init within tight timing window
+    ESP_ERROR_CHECK(usb_uplink_init());
+
+    // Now init NVS (needed for WiFi later)
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+#endif
+
     ESP_LOGI(TAG, "FTS built %s - %s - %s",
              BUILD_TIMESTAMP,
              BUILD_GIT_DIRTY ? "DIRTY" : "CLEAN",
@@ -97,9 +112,8 @@ void app_main(void)
     // WiFi mode: Initialize WiFi STA with FTM initiator (starts WiFi and MAC clock)
     ESP_ERROR_CHECK(ftm_slave_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD));
 #elif defined(CONFIG_FTS_MODE_USB_NCM)
-    // USB-NCM mode: WiFi for ESP-NOW sync + FTM, USB for IP transport
+    // WiFi for ESP-NOW sync + FTM (USB already initialized above)
     ESP_ERROR_CHECK(ftm_slave_espnow_init(CONFIG_FTS_ESPNOW_CHANNEL));
-    ESP_ERROR_CHECK(usb_uplink_init());
 #endif
 
     // Initialize DTR (MCPWM timer hardware)
@@ -151,9 +165,9 @@ void app_main(void)
     // External AP mode: Master connects to external WiFi like slaves
     ESP_ERROR_CHECK(ftm_master_sta_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD));
 #elif defined(CONFIG_FTS_MODE_USB_NCM)
-    // USB-NCM mode: WiFi for ESP-NOW sync + FTM responder, USB for IP transport
+    // USB-NCM mode: WiFi for ESP-NOW sync + FTM responder
+    // (USB already initialized at start of app_main)
     ESP_ERROR_CHECK(ftm_master_espnow_init(CONFIG_FTS_ESPNOW_CHANNEL));
-    ESP_ERROR_CHECK(usb_uplink_init());
 #endif
 
     // Initialize DTR (MCPWM timer hardware)
