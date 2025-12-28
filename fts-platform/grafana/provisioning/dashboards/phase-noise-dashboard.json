@@ -45,10 +45,6 @@
           {
             "matcher": { "id": "byName", "options": "freq_order" },
             "properties": [{ "id": "custom.hideFrom", "value": { "legend": true, "tooltip": true, "viz": true } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Frequency" },
-            "properties": [{ "id": "custom.axisPlacement", "value": "hidden" }]
           }
         ]
       },
