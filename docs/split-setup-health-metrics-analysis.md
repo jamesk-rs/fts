@@ -372,43 +372,39 @@ To show both:
 3. **Alerts:** Add Grafana alerts for lab PC high CPU/memory
 4. **Custom metrics:** Add stream-mqtt specific metrics (buffer depth, overflow count)
 
-## Telegraf Architecture: Single vs Split Instance
+## Telegraf Architecture: Single Instance Per Site ✅ **DECIDED**
 
-The proposed solution runs two Telegraf instances in cloud:
-1. **Lab metrics collector** (new) - Publishes to MQTT (`health/lab/*`)
-2. **Cloud MQTT consumer + local collector** (existing) - Reads MQTT, collects cloud metrics, writes to InfluxDB
+**Decision:** Use single Telegraf instance per site (lab and cloud).
 
-### Option A: Keep Split (Recommended for Lab, Question for Cloud)
+### Implementation
 
-**Lab PC:**
-- Separate Telegraf instance makes sense (no InfluxDB available locally)
+**Lab Site:**
+- **One Telegraf instance** that:
+  - Collects local system metrics (CPU, memory, disk, Docker)
+  - Publishes to local MQTT (`health/lab/*` topics)
+  - No direct InfluxDB access (relies on bridge to cloud)
 
-**Cloud:**
-- **Current:** One Telegraf does MQTT consumption + local collection
-- **Alternative:** Split into two instances:
-  - Instance 1: MQTT consumer only (FTS data + lab health)
-  - Instance 2: Local metrics collector only (cloud health)
+**Cloud Site:**
+- **One Telegraf instance** that:
+  - Consumes MQTT (FTS data from `fts/#` + lab health from `health/lab/#`)
+  - Collects local cloud system metrics (CPU, memory, disk, Docker)
+  - Writes everything to InfluxDB (both FTS and health buckets)
 
-**Pros of splitting cloud Telegraf:**
-- Separation of concerns (data ingestion vs collection)
-- Different collection intervals (1s for FTS MQTT, 10s for health)
-- Easier to debug and restart independently
-- Can scale differently (e.g., more resources to MQTT consumer)
+### Rationale
 
-**Cons of splitting cloud Telegraf:**
-- One more container to manage
-- Slightly more complex configuration
+**Pros of single instance per site:**
+- ✅ Simpler architecture (fewer containers to manage)
+- ✅ Unified configuration per site
+- ✅ One Telegraf to monitor/debug per site
+- ✅ Sufficient for current needs
 
-**Recommendation:** Start with single cloud Telegraf (simpler), can split later if needed for performance/debugging.
+**Alternative considered (split instances):**
+- Could split cloud Telegraf into separate MQTT consumer and local collector
+- Would enable different intervals and independent scaling
+- Adds complexity without clear benefit for current use case
+- Can be done later if performance issues arise
 
-### Option B: Unified Cloud Telegraf (Current Approach)
-
-Keep one cloud Telegraf that:
-- Consumes MQTT (FTS data + lab health metrics)
-- Collects local cloud metrics
-- Writes everything to InfluxDB
-
-This is simpler and sufficient unless there are performance issues.
+**Conclusion:** Single unified Telegraf per site is the right balance of simplicity and functionality.
 
 ## Alternative Considered: InfluxDB Line Protocol
 

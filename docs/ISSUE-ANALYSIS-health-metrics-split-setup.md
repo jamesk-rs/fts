@@ -18,19 +18,22 @@ The split-local profile only runs Mosquitto and stream-mqtt. Telegraf was intent
 
 **Add Telegraf to split-local profile** to collect lab PC health metrics and publish them via MQTT.
 
-### Architecture
+### Architecture ✅
+
+**Single Telegraf instance per site (approved):**
 
 ```
 Lab PC                          Cloud
 ├── Mosquitto ════════════════► Mosquitto (bridged)
 ├── stream-mqtt                 │
-└── Telegraf ──┐                ├── Telegraf (reads MQTT + collects cloud metrics)
-               ├─→ Collects:    │   └─→ Writes to InfluxDB
-               │   - CPU        │
-               │   - RAM        ├── InfluxDB (health bucket)
-               │   - Disk       └── Grafana (shows both lab & cloud)
-               │   - Docker
-               └─→ Publishes to: health/lab/* (separate namespace)
+└── Telegraf ──┐                ├── Telegraf (single instance)
+               ├─→ Collects:    │   ├─→ Consumes MQTT (fts/#, health/lab/#)
+               │   - CPU        │   ├─→ Collects local cloud metrics
+               │   - RAM        │   └─→ Writes to InfluxDB
+               │   - Disk       │
+               │   - Docker     ├── InfluxDB (fts + health buckets)
+               └─→ Publishes:   └── Grafana (shows both lab & cloud)
+                   health/lab/*
 ```
 
 ### Why This Solution?
@@ -107,18 +110,24 @@ Lab Telegraf → Local MQTT → Bridge → Cloud MQTT → Cloud Telegraf → Inf
 - [ ] Test disconnection scenario (bridge down/up)
 - [ ] Verify metrics queue and catch up after reconnection
 
+## Decisions Made ✅
+
+1. **Architecture:** Single Telegraf instance per site (lab and cloud) - ✅ **APPROVED**
+2. **Topic namespace:** `health/lab/*` (separate from `fts/` data) - ✅ **APPROVED**
+3. **Site tagging:** Metrics tagged with `site=lab` and `site=cloud` - ✅ **APPROVED**
+4. **Collection interval:** 10 seconds (less frequent than FTS data at 1s)
+
 ## Open Questions
 
-1. **Collection interval:** Is 10 seconds acceptable? (vs 1s for FTS data)
-2. **Multi-lab support:** Should metrics include lab location tag?
-3. **Dashboard:** Create separate dashboard for lab metrics or integrate into existing?
-4. **Approval:** Proceed with implementation?
+1. Proceed with implementation? ⏳ **AWAITING FINAL APPROVAL**
 
 ## Next Steps
 
 - [x] Complete analysis
 - [x] Document solutions
-- [ ] Get approval from maintainer
+- [x] Address maintainer feedback
+- [x] **Decision:** Single Telegraf per site (approved by maintainer)
+- [ ] Get final approval to proceed with implementation
 - [ ] Implement changes
 - [ ] Test on development environment
 - [ ] Deploy to production
