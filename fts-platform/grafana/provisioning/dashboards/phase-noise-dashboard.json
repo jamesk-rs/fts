@@ -115,7 +115,7 @@
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({\n      _time: r._time,\n      \"0.2 Hz\": r.f_0p2,\n      \"0.5 Hz\": r.f_0p5,\n      \"1 Hz\": r.f_1,\n      \"2 Hz\": r.f_2,\n      \"5 Hz\": r.f_5,\n      \"10 Hz\": r.f_10,\n      \"20 Hz\": r.f_20,\n      \"50 Hz\": r.f_50,\n      \"100 Hz\": r.f_100,\n      \"200 Hz\": r.f_200,\n      \"500 Hz\": r.f_500\n    }))",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({\n      _time: r._time,\n      \"01: 0.2 Hz\": r.f_0p2,\n      \"02: 0.5 Hz\": r.f_0p5,\n      \"03: 1 Hz\": r.f_1,\n      \"04: 2 Hz\": r.f_2,\n      \"05: 5 Hz\": r.f_5,\n      \"06: 10 Hz\": r.f_10,\n      \"07: 20 Hz\": r.f_20,\n      \"08: 50 Hz\": r.f_50,\n      \"09: 100 Hz\": r.f_100,\n      \"10: 200 Hz\": r.f_200,\n      \"11: 500 Hz\": r.f_500\n    }))",
           "refId": "A"
         }
       ]
