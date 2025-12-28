@@ -103,22 +103,13 @@ class ChunkProcessor:
 
     def _process_bucket(self, bucket: MinuteBucket) -> None:
         """Called from processing thread for completed minute."""
-        from analyze.jitter import match_edges
-
-        if len(bucket.edges_a) < 10 or len(bucket.edges_b) < 10:
-            print(f"[MINUTE {bucket.minute_str}] Too few edges: A={len(bucket.edges_a)} B={len(bucket.edges_b)}")
+        # Use pre-matched delays from collector (avoids GIL-blocking re-match)
+        if len(bucket.delays) < 10:
+            print(f"[MINUTE {bucket.minute_str}] Too few matches: {len(bucket.delays)}")
             return
 
-        # Match edges and compute stats
-        times_a = np.array(bucket.edges_a)
-        times_b = np.array(bucket.edges_b)
-        result = match_edges(times_a, times_b, sample_rate=1.0, pulse_freq=self._pulse_freq)
-
-        if len(result.delays) < 10:
-            print(f"[MINUTE {bucket.minute_str}] Too few matches: {len(result.delays)}")
-            return
-
-        stats = compute_stats(result.delays, self._pulse_freq)
+        delays = np.array(bucket.delays)
+        stats = compute_stats(delays, self._pulse_freq)
         self._on_minute_stats(bucket, stats)
 
     def set_overflow_count(self, count: int) -> None:

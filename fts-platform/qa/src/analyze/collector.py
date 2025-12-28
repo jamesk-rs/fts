@@ -8,6 +8,7 @@ Processing is offloaded to a background thread.
 import queue
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, Optional
@@ -22,6 +23,7 @@ class MinuteBucket:
     minute_epoch: int  # GPS minute (unix timestamp // 60)
     edges_a: list[float] = field(default_factory=list)  # Edge times (GPSDO seconds)
     edges_b: list[float] = field(default_factory=list)
+    delays: list[float] = field(default_factory=list)  # Matched delays in seconds
     sample_rate: float = 10e6
 
     @property
@@ -94,9 +96,9 @@ class EdgeCollector:
         self._first_minute_dropped = False
         self._gpsdo_start_time: Optional[float] = None
 
-        # Edge matching state (two-pointer merge)
-        self._queue_a: list[float] = []  # Edge times in GPSDO seconds
-        self._queue_b: list[float] = []
+        # Edge matching state (two-pointer merge) - deque for O(1) popleft
+        self._queue_a: deque[float] = deque()
+        self._queue_b: deque[float] = deque()
 
         # Stats tracking
         self._samples_processed = 0
@@ -215,9 +217,13 @@ class EdgeCollector:
 
             if abs(diff) <= max_match_delay:
                 # Match
-                self._queue_a.pop(0)
-                self._queue_b.pop(0)
+                self._queue_a.popleft()
+                self._queue_b.popleft()
                 self._matched_total += 1
+
+                # Store delay in current bucket for stats computation
+                if self._current_bucket is not None:
+                    self._current_bucket.delays.append(diff)
 
                 if self._on_edge:
                     delay_ns = diff * 1e9
@@ -229,7 +235,7 @@ class EdgeCollector:
 
             elif diff > 0:
                 # B is later - A missed its match
-                self._queue_a.pop(0)
+                self._queue_a.popleft()
                 self._unmatched_a_total += 1
 
                 if self._on_edge:
@@ -239,7 +245,7 @@ class EdgeCollector:
 
             else:
                 # A is later - B missed its match
-                self._queue_b.pop(0)
+                self._queue_b.popleft()
                 self._unmatched_b_total += 1
 
                 if self._on_edge:
