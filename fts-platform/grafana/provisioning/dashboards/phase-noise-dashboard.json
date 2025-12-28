@@ -41,7 +41,16 @@
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "dB"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "freq_order" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "legend": true, "tooltip": true, "viz": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Frequency" },
+            "properties": [{ "id": "custom.axisPlacement", "value": "hidden" }]
+          }
+        ]
       },
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 1 },
       "id": 1,
@@ -55,6 +64,7 @@
         "showValue": "always",
         "stacking": "none",
         "tooltip": { "mode": "single", "sort": "none" },
+        "xField": "Frequency",
         "xTickLabelRotation": -45,
         "xTickLabelSpacing": 0
       },
@@ -65,14 +75,14 @@
           "id": "sortBy",
           "options": {
             "fields": {},
-            "sort": [{ "field": "Frequency", "desc": false }]
+            "sort": [{ "field": "freq_order", "desc": false }]
           }
         }
       ],
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> map(fn: (r) => ({\n      _time: r._time,\n      Frequency: if r._field == \"f_0p2\" then 0.2\n        else if r._field == \"f_0p5\" then 0.5\n        else if r._field == \"f_1\" then 1.0\n        else if r._field == \"f_2\" then 2.0\n        else if r._field == \"f_5\" then 5.0\n        else if r._field == \"f_10\" then 10.0\n        else if r._field == \"f_20\" then 20.0\n        else if r._field == \"f_50\" then 50.0\n        else if r._field == \"f_100\" then 100.0\n        else if r._field == \"f_200\" then 200.0\n        else 500.0,\n      \"L(f) dBc/Hz\": r._value\n    }))\n  |> group()",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> map(fn: (r) => ({\n      _time: r._time,\n      freq_order: if r._field == \"f_0p2\" then 1\n        else if r._field == \"f_0p5\" then 2\n        else if r._field == \"f_1\" then 3\n        else if r._field == \"f_2\" then 4\n        else if r._field == \"f_5\" then 5\n        else if r._field == \"f_10\" then 6\n        else if r._field == \"f_20\" then 7\n        else if r._field == \"f_50\" then 8\n        else if r._field == \"f_100\" then 9\n        else if r._field == \"f_200\" then 10\n        else 11,\n      Frequency: if r._field == \"f_0p2\" then \"0.2 Hz\"\n        else if r._field == \"f_0p5\" then \"0.5 Hz\"\n        else if r._field == \"f_1\" then \"1 Hz\"\n        else if r._field == \"f_2\" then \"2 Hz\"\n        else if r._field == \"f_5\" then \"5 Hz\"\n        else if r._field == \"f_10\" then \"10 Hz\"\n        else if r._field == \"f_20\" then \"20 Hz\"\n        else if r._field == \"f_50\" then \"50 Hz\"\n        else if r._field == \"f_100\" then \"100 Hz\"\n        else if r._field == \"f_200\" then \"200 Hz\"\n        else \"500 Hz\",\n      \"L(f) dBc/Hz\": r._value\n    }))\n  |> group()\n  |> sort(columns: [\"freq_order\"])",
           "refId": "A"
         }
       ]
@@ -120,6 +130,29 @@
       },
       "title": "Phase Noise L(f) Over Time (All Bins)",
       "type": "timeseries",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Time": 0,
+              "01: 0.2 Hz": 1,
+              "02: 0.5 Hz": 2,
+              "03: 1 Hz": 3,
+              "04: 2 Hz": 4,
+              "05: 5 Hz": 5,
+              "06: 10 Hz": 6,
+              "07: 20 Hz": 7,
+              "08: 50 Hz": 8,
+              "09: 100 Hz": 9,
+              "10: 200 Hz": 10,
+              "11: 500 Hz": 11
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
