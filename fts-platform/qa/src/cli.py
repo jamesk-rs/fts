@@ -244,7 +244,7 @@ def cmd_stream_mqtt(args):
     import time
 
     duration_str = f"{args.duration}s" if args.duration else "indefinite (Ctrl+C to stop)"
-    print(f"Streaming capture with MQTT publishing...")
+    print(f"Streaming capture with MQTT publishing (GPSDO timestamps)...")
     print(f"  Duration: {duration_str}")
     print(f"  Sample rate: {args.sample_rate/1e6:.1f} MSps")
     print(f"  Pulse freq: {args.pulse_freq} Hz")
@@ -293,11 +293,8 @@ def cmd_stream_mqtt(args):
     edges_published = 0
     stats_published = 0
 
-    # # Timing accumulators for profiling
-    # time_detect = 0.0
-    # time_match = 0.0
-    # time_publish = 0.0
-    # time_stats = 0.0
+    # GPSDO time tracking - first chunk's time is our reference
+    gpsdo_start_time = None  # Will be set on first chunk
 
     # Accumulate delays in rolling window for stats (avoid re-matching)
     # Store (wall_clock_time, delay_array) tuples for time-based expiration
@@ -310,10 +307,15 @@ def cmd_stream_mqtt(args):
     window_unmatched_a = 0
     window_unmatched_b = 0
 
-    def process_chunk(data):
+    def process_chunk(data, chunk_time):
         nonlocal chunk_count, next_report_time, edges_published, stats_published
-        nonlocal all_delay_batches
+        nonlocal all_delay_batches, gpsdo_start_time
         nonlocal window_edges_a, window_edges_b, window_matched, window_unmatched_a, window_unmatched_b
+
+        # Track GPSDO start time from first chunk
+        if gpsdo_start_time is None:
+            gpsdo_start_time = chunk_time
+            print(f"  GPSDO start time: {gpsdo_start_time:.6f}s")
 
         chan_a = data.real
         chan_b = data.imag
@@ -340,6 +342,11 @@ def cmd_stream_mqtt(args):
         # Collect delays for this batch
         batch_delays = []
 
+        # Helper to compute GPSDO timestamp from sample index
+        def edge_timestamp(sample_idx):
+            """Convert sample index to absolute GPSDO timestamp."""
+            return gpsdo_start_time + (sample_idx / args.sample_rate)
+
         # First, handle single-queue expiration (when one channel is down)
         # This ensures we don't accumulate edges indefinitely
         if queue_a and not queue_b:
@@ -347,7 +354,7 @@ def cmd_stream_mqtt(args):
             while queue_a and len(queue_a) > 1:
                 a = queue_a.popleft()
                 ch_a_ns = int(a / args.sample_rate * 1e9)
-                if publisher.publish_edge(channel_a_ns=ch_a_ns):
+                if publisher.publish_edge(channel_a_ns=ch_a_ns, timestamp=edge_timestamp(a)):
                     edges_published += 1
                     window_unmatched_a += 1
 
@@ -356,7 +363,7 @@ def cmd_stream_mqtt(args):
             while queue_b and len(queue_b) > 1:
                 b = queue_b.popleft()
                 ch_b_ns = int(b / args.sample_rate * 1e9)
-                if publisher.publish_edge(channel_b_ns=ch_b_ns):
+                if publisher.publish_edge(channel_b_ns=ch_b_ns, timestamp=edge_timestamp(b)):
                     edges_published += 1
                     window_unmatched_b += 1
 
@@ -381,7 +388,9 @@ def cmd_stream_mqtt(args):
                     queue_b.popleft()
                     ch_a_ns = int(a / args.sample_rate * 1e9)
                     ch_b_ns = int(b / args.sample_rate * 1e9)
-                    if publisher.publish_edge(channel_a_ns=ch_a_ns, channel_b_ns=ch_b_ns):
+                    # Use channel A's timestamp as the edge timestamp
+                    if publisher.publish_edge(channel_a_ns=ch_a_ns, channel_b_ns=ch_b_ns,
+                                              timestamp=edge_timestamp(a)):
                         edges_published += 1
                         window_matched += 1
                     # Store delay in seconds for stats
@@ -390,14 +399,14 @@ def cmd_stream_mqtt(args):
                     # B is later than A - A missed its match
                     queue_a.popleft()
                     ch_a_ns = int(a / args.sample_rate * 1e9)
-                    if publisher.publish_edge(channel_a_ns=ch_a_ns):
+                    if publisher.publish_edge(channel_a_ns=ch_a_ns, timestamp=edge_timestamp(a)):
                         edges_published += 1
                         window_unmatched_a += 1
                 else:
                     # A is later than B - B missed its match
                     queue_b.popleft()
                     ch_b_ns = int(b / args.sample_rate * 1e9)
-                    if publisher.publish_edge(channel_b_ns=ch_b_ns):
+                    if publisher.publish_edge(channel_b_ns=ch_b_ns, timestamp=edge_timestamp(b)):
                         edges_published += 1
                         window_unmatched_b += 1
 
@@ -536,8 +545,11 @@ def cmd_stream(args):
     start_time = time.time()
     last_report_time = start_time
 
-    def process_chunk(data):
+    def process_chunk(data, chunk_time):
         nonlocal chunk_count, last_report_time
+
+        # chunk_time is GPSDO time (not used here, but required by callback signature)
+        _ = chunk_time
 
         chan_a = data.real
         chan_b = data.imag
@@ -745,9 +757,12 @@ def cmd_capture_edges(args):
     last_report_edge_count_a = 0
     last_report_edge_count_b = 0
 
-    def process_chunk(data):
+    def process_chunk(data, chunk_time):
         nonlocal start_time, next_report_time, REPORT_PERIOD
         nonlocal last_report_edge_count_a, last_report_edge_count_b
+
+        # chunk_time is GPSDO time (not used for edge file capture)
+        _ = chunk_time
 
         # Extract channels from complex data (float64 for edge detector precision)
         chan_a = data.real.astype(np.float64)

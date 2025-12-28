@@ -28,6 +28,7 @@ class USRPCapture:
         gain: float = 0.0,
         channels: Optional[list[int]] = None,
         addr: Optional[str] = None,
+        wait_for_gps: bool = True,
     ):
         """
         Initialize USRP RX capture.
@@ -38,6 +39,7 @@ class USRPCapture:
             gain: RX gain in dB (default: 0)
             channels: Channel indices (default: [0])
             addr: USRP address (default: from USRP_RX_ADDR env or 192.168.10.2)
+            wait_for_gps: Wait for GPS and ref lock before streaming (default: True)
         """
         config_kwargs = dict(
             sample_rate=sample_rate,
@@ -51,6 +53,47 @@ class USRPCapture:
         self._usrp = None
         self._streamer = None
         self._overflow_count = 0
+        self._wait_for_gps = wait_for_gps
+
+    def _wait_for_lock(self) -> None:
+        """
+        Wait for GPS and reference clock lock.
+
+        Blocks indefinitely until both GPS and REF are locked.
+        GPSDO lock is mandatory for correct timing.
+        """
+        import time
+
+        print("Waiting for GPSDO lock...")
+
+        while True:
+            # Check GPS lock
+            try:
+                gps_locked = self._usrp.get_mboard_sensor("gps_locked").to_bool()
+            except RuntimeError:
+                gps_locked = False
+
+            # Check ref lock (10MHz reference from GPSDO)
+            try:
+                ref_locked = self._usrp.get_mboard_sensor("ref_locked").to_bool()
+            except RuntimeError:
+                ref_locked = False
+
+            if gps_locked and ref_locked:
+                print("  GPS locked, ref locked")
+                return
+
+            status = []
+            status.append("GPS:locked" if gps_locked else "GPS:waiting")
+            status.append("REF:locked" if ref_locked else "REF:waiting")
+            print(f"  {' '.join(status)}...", end='\r')
+            time.sleep(1.0)
+
+    def get_usrp_time(self) -> float:
+        """Get current USRP time in seconds (from GPSDO)."""
+        if self._usrp is None:
+            return 0.0
+        return self._usrp.get_time_now().get_real_secs()
 
     def _init_usrp(self):
         """Initialize UHD USRP object."""
@@ -67,6 +110,16 @@ class USRPCapture:
         print(f"  Time source: {self.config.time_source}")
         self._usrp.set_clock_source(self.config.clock_source)
         self._usrp.set_time_source(self.config.time_source)
+
+        # Wait for GPS and ref lock if requested
+        if self._wait_for_gps:
+            self._wait_for_lock()
+            # Align USRP device time to GPS time at next PPS
+            import time
+            gps_time = self._usrp.get_mboard_sensor("gps_time").to_int()
+            self._usrp.set_time_next_pps(uhd.types.TimeSpec(gps_time + 1))
+            time.sleep(1.1)  # Wait for PPS edge
+            print(f"  USRP time aligned to GPS: {gps_time + 1}")
 
         # Configure RX
         self._usrp.set_rx_rate(self.config.sample_rate)
@@ -109,11 +162,15 @@ class USRPCapture:
         buffer_size = min(100000, n_samples)
         recv_buffer = np.zeros(buffer_size, dtype=np.complex64)
 
-        # Start streaming
+        # Schedule streaming to start at next whole second (avoids USB latency ambiguity)
+        current_time = self._usrp.get_time_now().get_real_secs()
+        start_time = int(current_time) + 1  # Next whole second
         stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.num_done)
         stream_cmd.num_samps = n_samples
-        stream_cmd.stream_now = True
+        stream_cmd.stream_now = False
+        stream_cmd.time_spec = uhd.types.TimeSpec(start_time)
         self._streamer.issue_stream_cmd(stream_cmd)
+        print(f"Capture scheduled to start at USRP time {start_time}")
 
         # Receive and write directly to file
         metadata = uhd.types.RXMetadata()
@@ -153,7 +210,7 @@ class USRPCapture:
 
     def stream(
         self,
-        callback: Callable[[np.ndarray], bool],
+        callback: Callable[[np.ndarray, float], bool],
         chunk_samples: int = 100000,
         duration: Optional[float] = None,
     ) -> None:
@@ -161,7 +218,8 @@ class USRPCapture:
         Stream samples with callback.
 
         Args:
-            callback: Called with each chunk. Return False to stop.
+            callback: Called with (chunk, timestamp). timestamp is GPSDO time
+                      of first sample in chunk (seconds). Return False to stop.
             chunk_samples: Samples per chunk
             duration: Max duration in seconds (None = until callback returns False)
         """
@@ -172,10 +230,14 @@ class USRPCapture:
 
         max_samples = int(duration * self.config.sample_rate) if duration else None
 
-        # Start continuous streaming
+        # Schedule streaming to start at next whole second (avoids USB latency ambiguity)
+        current_time = self._usrp.get_time_now().get_real_secs()
+        start_time = int(current_time) + 1  # Next whole second
         stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.start_cont)
-        stream_cmd.stream_now = True
+        stream_cmd.stream_now = False
+        stream_cmd.time_spec = uhd.types.TimeSpec(start_time)
         self._streamer.issue_stream_cmd(stream_cmd)
+        print(f"Streaming scheduled to start at USRP time {start_time}")
 
         metadata = uhd.types.RXMetadata()
         buffer = np.zeros(chunk_samples, dtype=np.complex64)
@@ -197,7 +259,10 @@ class USRPCapture:
 
                 samples_received += n
 
-                if not callback(buffer[:n]):
+                # Get GPSDO timestamp from metadata
+                chunk_time = metadata.time_spec.get_real_secs()
+
+                if not callback(buffer[:n], chunk_time):
                     break
 
                 if max_samples and samples_received >= max_samples:
@@ -220,7 +285,7 @@ class USRPCapture:
 
     def stream_threaded(
         self,
-        callback: Callable[[np.ndarray], bool],
+        callback: Callable[[np.ndarray, float], bool],
         chunk_samples: int = 100000,
         duration: Optional[float] = None,
         queue_depth: int = 200,
@@ -232,7 +297,8 @@ class USRPCapture:
         when callback processing occasionally takes longer than the chunk duration.
 
         Args:
-            callback: Called with each chunk. Return False to stop.
+            callback: Called with (chunk, timestamp). timestamp is GPSDO time
+                      of first sample in chunk (seconds). Return False to stop.
             chunk_samples: Samples per chunk
             duration: Max duration in seconds (None = until callback returns False)
             queue_depth: Max chunks to buffer (default: 200 = ~2s at 10ms chunks)
@@ -244,7 +310,12 @@ class USRPCapture:
 
         self._init_usrp()
 
-        # Shared state
+        # Schedule streaming to start at next whole second (avoids USB latency ambiguity)
+        current_time = self._usrp.get_time_now().get_real_secs()
+        scheduled_start = int(current_time) + 1  # Next whole second
+        print(f"Streaming scheduled to start at USRP time {scheduled_start}")
+
+        # Shared state - queue now holds (data, timestamp) tuples
         data_queue: queue.Queue = queue.Queue(maxsize=queue_depth)
         stop_event = threading.Event()
         self._overflow_count = 0
@@ -254,9 +325,10 @@ class USRPCapture:
             buffer = np.zeros(chunk_samples, dtype=np.complex64)
             metadata = uhd.types.RXMetadata()
 
-            # Start continuous streaming
+            # Start continuous streaming at scheduled time
             stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.start_cont)
-            stream_cmd.stream_now = True
+            stream_cmd.stream_now = False
+            stream_cmd.time_spec = uhd.types.TimeSpec(scheduled_start)
             self._streamer.issue_stream_cmd(stream_cmd)
 
             while not stop_event.is_set():
@@ -271,8 +343,10 @@ class USRPCapture:
 
                 if n > 0:
                     try:
+                        # Get timestamp from metadata (GPSDO time of first sample)
+                        chunk_time = metadata.time_spec.get_real_secs()
                         # Copy buffer since we reuse it
-                        data_queue.put(buffer[:n].copy(), timeout=0.1)
+                        data_queue.put((buffer[:n].copy(), chunk_time), timeout=0.1)
                     except queue.Full:
                         self._overflow_count += 1  # Queue full = soft overflow
 
@@ -303,7 +377,7 @@ class USRPCapture:
         try:
             while True:
                 try:
-                    chunk = data_queue.get(timeout=0.5)
+                    chunk, chunk_time = data_queue.get(timeout=0.5)
                 except queue.Empty:
                     if stop_event.is_set():
                         break
@@ -311,7 +385,7 @@ class USRPCapture:
 
                 samples_received += len(chunk)
 
-                if not callback(chunk):
+                if not callback(chunk, chunk_time):
                     break
 
                 if duration and (time.time() - start_time) >= duration:
