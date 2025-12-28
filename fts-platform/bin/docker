@@ -12,27 +12,40 @@ export DOCKER_GID="${DOCKER_GID:-$(stat -c '%g' /var/run/docker.sock 2>/dev/null
 
 cd "$PLATFORM_DIR"
 
+# Source .env to get COMPOSE_PROFILES
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+
+# Determine compose file based on profile
+COMPOSE_FILE_ARG=""
+if [ "$COMPOSE_PROFILES" = "split-local" ]; then
+    COMPOSE_FILE_ARG="-f docker-compose.split-local.yml"
+fi
+
 cmd="${1:-}"
 shift 2>/dev/null || true
 
 case "$cmd" in
     start|up)
         echo "Starting FTS platform${*:+ ($*)}..."
-        docker compose up -d "$@"
+        docker compose $COMPOSE_FILE_ARG up -d "$@"
         ;;
     stop|down)
         echo "Stopping FTS platform${*:+ ($*)}..."
-        docker compose down "$@"
+        docker compose $COMPOSE_FILE_ARG down "$@"
         ;;
     restart)
         echo "Restarting FTS platform${*:+ ($*)}..."
-        docker compose up -d --build "$@"
+        docker compose $COMPOSE_FILE_ARG up -d --build "$@"
         ;;
     status|ps)
-        docker compose ps "$@"
+        docker compose $COMPOSE_FILE_ARG ps "$@"
         ;;
     logs)
-        docker compose logs "$@"
+        docker compose $COMPOSE_FILE_ARG logs "$@"
         ;;
     *)
         echo "Usage: $(basename "$0") {start|stop|restart|status|logs} [services...]"

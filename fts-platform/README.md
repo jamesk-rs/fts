@@ -1,18 +1,227 @@
-# FTS RL Platform
+# FTS Platform
 
-Real-time RL-based clock synchronization platform for FTS.
+This folder contains implementation of TIG stack (Telegraf, InfluxDB, Grafana) with MQTT broker.
+It includes stream-mqtt container pulling data from SDR and logging edge timing.
+ESP32 devices are expected to submit MQTT messages directly.
+It supports two deployment modes: a local installation (all components on one host) and split setup (data collectors on one host and the rest of the containers on another host, in the cloud).
 
 ## Quick Start
 
 ```bash
+# Deploy with local profile
+./bin/03-deploy-stack.sh local
+
 # Start all services
-docker compose up -d
+bin/docker start
 
 # View logs
-docker compose logs -f rl_engine
+bin/docker logs -f
 
 # Stop all services
-docker compose down
+bin/docker stop
+```
+
+## Deployment Profiles
+
+Set `COMPOSE_PROFILES` in `.env` to select:
+
+| Profile | Use case |
+|---------|----------|
+| `local` | Everything on single machine (development) |
+| `split-local` | Lab side of split setup (Mosquitto + stream-mqtt) |
+| `split-cloud` | Cloud side of split setup (full TIG stack) |
+
+### Local Setup
+
+Everything runs on a single machine. Use this for development or when all hardware (ESP32, SDR) is connected to the same host.
+
+```
+┌─────────────────────────────────────────┐
+│              Local Host                 │
+│                                         │
+│  ESP32 ──┐                              │
+│          ├─► Mosquitto ─► Telegraf      │
+│  SDR ────┤                    │         │
+│          ▼                    ▼         │
+│    stream-mqtt           InfluxDB       │
+│                              │          │
+│                              ▼          │
+│                           Grafana       │
+└─────────────────────────────────────────┘
+```
+
+### Split Setup
+
+Lab equipment stays local, TIG stack runs in the cloud. MQTT messages are bridged over the internet with authentication. Handles unreliable connections - messages queue locally during outages.
+
+```
+LAB (Shuttle PC)                         CLOUD (LXC/VM)
+┌─────────────────────┐                  ┌─────────────────────┐
+│  ESP32 ──┐          │                  │                     │
+│          ├─► Mosquitto ═══════════════►│ Mosquitto (auth)    │
+│  SDR ────┤     │    │   MQTT bridge    │      │              │
+│          ▼     │    │   (encrypted)    │      ▼              │
+│   stream-mqtt  │    │                  │   Telegraf          │
+│                │    │                  │      │              │
+│           queue on  │                  │      ▼              │
+│           disconnect│                  │   InfluxDB          │
+│                     │                  │      │              │
+│                     │                  │      ▼              │
+│                     │                  │   Grafana           │
+└─────────────────────┘                  └─────────────────────┘
+```
+
+## Installation
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Git to clone the repository
+
+### Local Setup Installation
+
+```bash
+# Clone repository
+git clone <repo-url> /opt/fts
+cd /opt/fts/fts-platform
+
+# Deploy with local profile
+./bin/03-deploy-stack.sh local
+```
+
+The script will:
+1. Generate `.env` with secure credentials
+2. Configure unauthenticated Mosquitto (local network only)
+3. Start all services
+
+Access points after deployment:
+- Grafana: http://localhost:3000
+- InfluxDB: http://localhost:8086
+- MQTT: mqtt://localhost:1883
+
+### Split Setup Installation
+
+**Step 1: Deploy Cloud Instance**
+
+On your cloud server (LXC, VM, or any Docker host):
+
+```bash
+# Clone repository
+git clone <repo-url> /opt/fts
+cd /opt/fts/fts-platform
+
+# Deploy with split-cloud profile
+./bin/03-deploy-stack.sh split-cloud
+```
+
+The script will:
+1. Generate `.env` with secure credentials including MQTT username/password
+2. Configure authenticated Mosquitto
+3. Start Mosquitto + TIG stack
+
+**Save the generated credentials** - you'll need `MQTT_USERNAME` and `MQTT_PASSWORD` for the lab setup.
+
+**Step 2: Deploy Lab Instance**
+
+On your lab machine (Shuttle PC):
+
+```bash
+# Clone repository
+git clone <repo-url> /opt/fts
+cd /opt/fts/fts-platform
+
+# Create .env with cloud credentials
+cp .env.example .env
+```
+
+Edit `.env` and set:
+```bash
+# Use same credentials as cloud instance
+MQTT_USERNAME=fts
+MQTT_PASSWORD=<password from cloud .env>
+
+# Cloud instance address
+MQTT_BRIDGE_HOST=<cloud-ip-or-hostname>
+MQTT_BRIDGE_PORT=1883
+```
+
+Then deploy:
+```bash
+./bin/03-deploy-stack.sh split-local
+```
+
+The script will:
+1. Configure Mosquitto with bridge to cloud
+2. Start Mosquitto + stream-mqtt
+3. Begin forwarding `fts/#` messages to cloud
+
+### Proxmox LXC Installation
+
+If deploying to Proxmox, use the helper scripts:
+
+```bash
+# On Proxmox host: create LXC container
+scp bin/01-create-lxc.sh root@proxmox:/root/
+ssh root@proxmox
+chmod +x /root/01-create-lxc.sh
+./01-create-lxc.sh
+
+# On Proxmox host: install Docker in LXC
+scp bin/02-install-docker.sh root@proxmox:/root/
+chmod +x /root/02-install-docker.sh
+./02-install-docker.sh
+
+# Enter LXC and deploy
+pct enter 200
+git clone <repo-url> /opt/fts
+cd /opt/fts/fts-platform
+./bin/03-deploy-stack.sh split-cloud  # or 'local'
+```
+
+## Configuration
+
+### Environment Variables
+
+All configuration is in `.env` (auto-generated from `.env.example`):
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `COMPOSE_PROFILES` | Yes | Deployment profile (local, split-local, split-cloud) |
+| `INFLUX_ADMIN_TOKEN` | Yes | InfluxDB API token |
+| `INFLUX_ADMIN_PASSWORD` | Yes | InfluxDB admin password |
+| `GRAFANA_ADMIN_PASSWORD` | Yes | Grafana admin password |
+| `MQTT_USERNAME` | split-* | MQTT authentication username |
+| `MQTT_PASSWORD` | split-* | MQTT authentication password |
+| `MQTT_BRIDGE_HOST` | split-local | Cloud Mosquitto address |
+| `MQTT_BRIDGE_PORT` | split-local | Cloud Mosquitto port (default: 1883) |
+
+## Ports
+
+| Service | Port | Protocol |
+|---------|------|----------|
+| Grafana | 3000 | HTTP |
+| InfluxDB | 8086 | HTTP |
+| MQTT | 1883 | TCP |
+| MQTT WebSocket | 9001 | WS |
+
+## Firewall
+
+For split setup, ensure these ports are open on the cloud instance:
+- 1883/tcp - MQTT (required for bridge)
+- 3000/tcp - Grafana (for dashboard access)
+- 8086/tcp - InfluxDB (optional, for direct API access)
+
+## Development
+
+```bash
+# Rebuild after code changes
+bin/docker restart
+
+# Access InfluxDB UI
+open http://localhost:8086
+
+# Access Grafana
+open http://localhost:3000
 ```
 
 ## Services
@@ -21,9 +230,8 @@ docker compose down
 |---------|------|-------------|
 | Mosquitto | 1883 | MQTT broker |
 | InfluxDB | 8086 | Time series database |
-| Redis | 6379 | State cache |
-| Grafana | 3000 | Dashboards (admin/admin) |
-| RL Engine | - | RL processing service |
+| Grafana | 3000 | Dashboards |
+| Telegraf | - | Metrics collection |
 
 ## MQTT Topics
 
@@ -36,70 +244,3 @@ docker compose down
 
 ### Platform → Device
 - `fts/{device_id}/control` - Period corrections
-
-## ESP32 Integration
-
-Add to your FTS firmware:
-
-```c
-#include "fts_mqtt.h"
-
-void control_callback(int32_t correction, float phase_error, float K) {
-    // Apply period correction to DTR
-    dtr_apply_correction(correction);
-}
-
-void app_main(void) {
-    fts_mqtt_config_t mqtt_cfg = {
-        .broker_uri = "mqtt://192.168.1.100:1883",
-        .device_id = "slave1",
-        .ctrl_cb = control_callback,
-    };
-    fts_mqtt_init(&mqtt_cfg);
-    fts_mqtt_start();
-
-    // In your FTM callback:
-    fts_mqtt_publish_ftm(esp_timer_get_time(), session_id,
-                         rtt_ps, rssi, t1, t2, t3, t4);
-}
-```
-
-## SDR Integration
-
-```python
-from sdr_publisher import SDRPublisher
-
-publisher = SDRPublisher("192.168.1.100")
-
-for edge_a_ns, edge_b_ns in detect_edges(samples):
-    publisher.publish_edge(edge_a_ns, edge_b_ns)
-```
-
-## RL Parameters
-
-Environment variables for `rl_engine`:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RL_LEARNING_RATE` | 0.01 | Learning rate for gain updates |
-| `RL_INITIAL_GAIN` | 1.0 | Initial proportional gain |
-| `RL_MIN_GAIN` | 0.1 | Minimum gain bound |
-| `RL_MAX_GAIN` | 10.0 | Maximum gain bound |
-| `CORRELATION_WINDOW_MS` | 100 | FTM-SDR correlation window |
-
-## Development
-
-```bash
-# Rebuild rl_engine after code changes
-docker compose build rl_engine
-docker compose up -d rl_engine
-
-# View rl_engine logs
-docker compose logs -f rl_engine
-
-# Access InfluxDB UI
-open http://localhost:8086
-
-# Access Grafana
-open http://localhost:3000
-```

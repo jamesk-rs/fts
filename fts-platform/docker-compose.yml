@@ -1,39 +1,44 @@
 services:
   mosquitto:
+    profiles: ["local", "split-local", "split-cloud"]
     image: eclipse-mosquitto:2
     ports:
       - "1883:1883"
       - "9001:9001"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mosquitto/config:/mosquitto/config
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      test: ["CMD-SHELL", "nc -z localhost 1883"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   influxdb:
+    profiles: ["local", "split-cloud"]
     image: influxdb:2.7
     ports:
       - "8086:8086"
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
-      - DOCKER_INFLUXDB_INIT_ORG=fts
-      - DOCKER_INFLUXDB_INIT_BUCKET=fts
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=fts-token-change-me
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_ADMIN_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_ADMIN_PASSWORD:-changeme}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:-fts}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:-fts}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_ADMIN_TOKEN:-changeme}
+      #- INFLUXD_QUERY_CONCURRENCY=0
+      #- INFLUXD_QUERY_QUEUE_SIZE=0
+      #- INFLUXD_STORAGE_CACHE_MAX_MEMORY_SIZE=4294967296
     volumes:
       - influxdb_data:/var/lib/influxdb2
       - ./influxdb/init-buckets.sh:/docker-entrypoint-initdb.d/init-buckets.sh:ro
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
+    #deploy:
+    #  resources:
+    #    limits:
+    #      cpus: '4'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
       interval: 30s
@@ -41,6 +46,7 @@ services:
       retries: 3
 
   telegraf:
+    profiles: ["local", "split-cloud"]
     image: telegraf:1.29
     volumes:
       - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
@@ -50,8 +56,14 @@ services:
     environment:
       - HOST_PROC=/host/proc
       - HOST_SYS=/host/sys
+      - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN:-changeme}
+      - INFLUX_ORG=${INFLUX_ORG:-fts}
+      - INFLUX_BUCKET=${INFLUX_BUCKET:-fts}
+      - INFLUX_BUCKET_HEALTH=health
+      - MQTT_USERNAME=${MQTT_USERNAME:-fts}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-changeme}
     group_add:
-      - "${DOCKER_GID:-124}"  # GID of docker group on host (run: stat -c '%g' /var/run/docker.sock)
+      - "${DOCKER_GID}"
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -74,11 +86,12 @@ services:
       retries: 3
 
   grafana:
+    profiles: ["local", "split-cloud"]
     image: grafana/grafana:10.4.3
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_INSTALL_PLUGINS=grafana-clock-panel
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -87,6 +100,11 @@ services:
       influxdb:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   rl_engine:
     build: ./rl_engine
@@ -102,17 +120,17 @@ services:
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
       - INFLUX_URL=http://influxdb:8086
-      - INFLUX_TOKEN=fts-token-change-me
-      - INFLUX_ORG=fts
-      - INFLUX_BUCKET=fts
+      - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN:?Create .env from .env.example}
+      - INFLUX_ORG=${INFLUX_ORG:?Create .env from .env.example}
+      - INFLUX_BUCKET=${INFLUX_BUCKET:?Create .env from .env.example}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - LOG_LEVEL=INFO
     restart: unless-stopped
 
   stream-mqtt:
+    profiles: ["local", "split-local"]
     build: ./qa
-    profiles: ["sdr"]  # Only with: docker compose --profile sdr up
     depends_on:
       mosquitto:
         condition: service_healthy
