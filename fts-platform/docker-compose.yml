@@ -71,20 +71,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    profiles: ["rl"]  # Only needed for RL engine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   grafana:
     profiles: ["local", "split-cloud"]
     image: grafana/grafana:10.4.3
@@ -106,28 +92,6 @@ services:
       timeout: 10s
       retries: 3
 
-  rl_engine:
-    build: ./rl_engine
-    profiles: ["rl"]  # Disabled by default, use: docker compose --profile rl up
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-      influxdb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      - MQTT_HOST=mosquitto
-      - MQTT_PORT=1883
-      - INFLUX_URL=http://influxdb:8086
-      - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN:?Create .env from .env.example}
-      - INFLUX_ORG=${INFLUX_ORG:?Create .env from .env.example}
-      - INFLUX_BUCKET=${INFLUX_BUCKET:?Create .env from .env.example}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - LOG_LEVEL=INFO
-    restart: unless-stopped
-
   stream-mqtt:
     profiles: ["local", "split-local"]
     build: ./qa
@@ -148,5 +112,4 @@ volumes:
   mosquitto_data:
   mosquitto_log:
   influxdb_data:
-  redis_data:
   grafana_data:

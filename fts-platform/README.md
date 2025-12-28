@@ -243,4 +243,10 @@ open http://localhost:3000
 - `fts/sdr/edges` - Edge timing data
 
 ### Platform → Device
-- `fts/{device_id}/control` - Period corrections
+- `fts/{device_id}/control` - Remote control (draft implementation)
+
+```
+(.venv) abb@fts:~/fts/fts-platform$ bin/control
+usage: control [-h] [--broker BROKER] [--port PORT] {trigger-wifi-disconnect} ...
+control: error: the following arguments are required: command
+```

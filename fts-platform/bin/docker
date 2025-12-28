@@ -57,7 +57,7 @@ case "$cmd" in
         echo "  status  [svc...]  - Show service status"
         echo "  logs    [svc...]  - Show logs (supports -f, --tail, etc.)"
         echo ""
-        echo "Services: mosquitto, influxdb, telegraf, redis, grafana, rl_engine"
+        echo "Services: mosquitto, influxdb, telegraf, grafana, stream-mqtt"
         echo ""
         echo "Examples:"
         echo "  $(basename "$0") start"

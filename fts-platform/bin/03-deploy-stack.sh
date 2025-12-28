@@ -70,15 +70,13 @@ set +a
 
 # Validate COMPOSE_PROFILES matches the requested profile
 if [ -n "$COMPOSE_PROFILES" ]; then
-    # Extract base profile (remove ,rl suffix if present)
-    ENV_PROFILE=$(echo "$COMPOSE_PROFILES" | sed 's/,rl$//')
-    if [ "$ENV_PROFILE" != "$PROFILE" ]; then
+    if [ "$COMPOSE_PROFILES" != "$PROFILE" ]; then
         echo "Error: Profile mismatch!"
         echo "  Requested profile: $PROFILE"
         echo "  COMPOSE_PROFILES in .env: $COMPOSE_PROFILES"
         echo ""
         echo "Either:"
-        echo "  1. Run with matching profile: ./03-deploy-stack.sh $ENV_PROFILE"
+        echo "  1. Run with matching profile: ./03-deploy-stack.sh $COMPOSE_PROFILES"
         echo "  2. Update COMPOSE_PROFILES in .env to: $PROFILE"
         exit 1
     fi
@@ -293,8 +291,4 @@ echo "Current profile: $PROFILE"
 if [ "$PROFILE" = "split-local" ]; then
     echo ""
     echo "MQTT bridged to: ${MQTT_BRIDGE_HOST}:${MQTT_BRIDGE_PORT}"
-else
-    echo ""
-    echo "To add RL engine (local or split-cloud only):"
-    echo "  docker compose --profile $PROFILE --profile rl up -d"
 fi
