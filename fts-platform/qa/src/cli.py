@@ -271,7 +271,7 @@ def cmd_stream_mqtt(args):
     # Minute stats callback (called from processing thread)
     stats_published = [0]
 
-    def on_minute_stats(bucket, stats):
+    def on_minute_stats(bucket, stats, phase_noise):
         channel_stats = {
             'channel_a_edges': len(bucket.edges_a),
             'channel_b_edges': len(bucket.edges_b),
@@ -279,6 +279,10 @@ def cmd_stream_mqtt(args):
         }
         publisher.publish_stats(stats.to_dict(), processor._overflow_count, channel_stats)
         stats_published[0] += 1
+
+        # Publish phase noise if computed
+        if phase_noise is not None:
+            publisher.publish_phase_noise(phase_noise.to_dict(), bucket.start_time)
 
         print(f"[MINUTE {bucket.minute_str}] {stats.count} matched | "
               f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns "
@@ -354,7 +358,7 @@ def cmd_stream(args):
     print(f"  Threshold: {args.threshold}")
 
     # Minute stats callback (called from processing thread)
-    def on_minute_stats(bucket, stats):
+    def on_minute_stats(bucket, stats, phase_noise):
         print(f"[MINUTE {bucket.minute_str}] {len(bucket.edges_a)} matched | "
               f"mean={stats.mean_ns:+.1f}ns std={stats.std_ns:.1f}ns "
               f"p50={stats.p50_ns:.1f}ns p99={stats.p99_ns:.1f}ns")

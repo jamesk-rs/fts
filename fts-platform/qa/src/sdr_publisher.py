@@ -178,6 +178,35 @@ class SDRPublisher:
         result = self.mqtt.publish(topic, json.dumps(payload), qos=1)
         return result.rc == mqtt.MQTT_ERR_SUCCESS
 
+    def publish_phase_noise(
+        self,
+        phase_noise: dict,
+        timestamp: float,
+        topic: str = "fts/sdr/phase_noise",
+    ) -> bool:
+        """
+        Publish phase noise data to MQTT.
+
+        Args:
+            phase_noise: Dictionary from PhaseNoiseResult.to_dict()
+            timestamp: Timestamp for this measurement (minute boundary)
+            topic: MQTT topic for phase noise (default: fts/sdr/phase_noise)
+
+        Returns:
+            True if published successfully
+        """
+        if not self.connected:
+            logger.warning("Not connected to MQTT broker")
+            return False
+
+        payload = {
+            "ts": timestamp,
+            **phase_noise,
+        }
+
+        result = self.mqtt.publish(topic, json.dumps(payload), qos=1)
+        return result.rc == mqtt.MQTT_ERR_SUCCESS
+
     def publish_edge_batch(
         self,
         edges: list[tuple[int, int]],

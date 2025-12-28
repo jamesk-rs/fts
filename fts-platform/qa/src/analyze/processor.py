@@ -10,6 +10,7 @@ import numpy as np
 
 from analyze.collector import EdgeCollector, MinuteBucket, CollectorStatus
 from analyze.stats import JitterStats, compute_stats
+from analyze.phase_noise import PhaseNoiseResult, compute_phase_noise
 from detect import StreamingCrossingDetector
 
 
@@ -32,7 +33,7 @@ class ChunkProcessor:
         sample_rate: float,
         pulse_freq: float,
         threshold: float,
-        on_minute_stats: Callable[[MinuteBucket, JitterStats], None],
+        on_minute_stats: Callable[[MinuteBucket, JitterStats, Optional[PhaseNoiseResult]], None],
         on_edge: Optional[Callable[[float, Optional[float], Optional[int], Optional[int]], None]] = None,
     ):
         """
@@ -42,7 +43,7 @@ class ChunkProcessor:
             sample_rate: Sample rate in Hz
             pulse_freq: Expected pulse frequency in Hz
             threshold: Edge detection threshold
-            on_minute_stats: Called from processing thread with (bucket, stats) for each minute
+            on_minute_stats: Called from processing thread with (bucket, stats, phase_noise) for each minute
             on_edge: Optional callback for real-time edge publishing (MQTT)
                      Called with (gpsdo_time, delay_ns or None, ch_a_ns or None, ch_b_ns or None)
         """
@@ -110,7 +111,11 @@ class ChunkProcessor:
 
         delays = np.array(bucket.delays)
         stats = compute_stats(delays, self._pulse_freq)
-        self._on_minute_stats(bucket, stats)
+
+        # Compute phase noise FFT
+        phase_noise = compute_phase_noise(delays, self._pulse_freq)
+
+        self._on_minute_stats(bucket, stats, phase_noise)
 
     def set_overflow_count(self, count: int) -> None:
         """Update overflow count from USRP capture."""
