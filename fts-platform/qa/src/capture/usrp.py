@@ -119,7 +119,7 @@ class USRPCapture:
             gps_time = self._usrp.get_mboard_sensor("gps_time").to_int()
             self._usrp.set_time_next_pps(uhd.types.TimeSpec(gps_time + 1))
             time.sleep(1.1)  # Wait for PPS edge
-            print(f"  USRP time aligned to GPS: {gps_time + 1}")
+            print(f"  USRP time aligned to GPS: {gps_time + 1}s ({datetime.fromtimestamp(gps_time + 1).strftime('%Y-%m-%d %H:%M:%S')})")
 
         # Configure RX
         self._usrp.set_rx_rate(self.config.sample_rate)
