@@ -18,7 +18,67 @@
     },
     {
       "datasource": { "type": "influxdb", "uid": "influxdb" },
-      "description": "Single-sideband phase noise L(f) vs offset frequency. Lower is better.",
+      "description": "Single-sideband phase noise L(f) vs offset frequency. Lower is better. Shows latest measurement.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "L(f) [dBc/Hz]",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "hue",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineWidth": 1,
+            "scaleDistribution": { "type": "linear" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "max": -60,
+          "min": -160,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "dB"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "barRadius": 0.1,
+        "barWidth": 0.8,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "orientation": "vertical",
+        "showValue": "always",
+        "stacking": "none",
+        "tooltip": { "mode": "single", "sort": "none" },
+        "xTickLabelRotation": -45,
+        "xTickLabelSpacing": 0
+      },
+      "title": "Phase Noise Spectrum (Latest)",
+      "type": "barchart",
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "reducers": ["lastNotNull"]
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({\n      _time: r._time,\n      \"0.2 Hz\": r.f_0p2,\n      \"0.5 Hz\": r.f_0p5,\n      \"1 Hz\": r.f_1,\n      \"2 Hz\": r.f_2,\n      \"5 Hz\": r.f_5,\n      \"10 Hz\": r.f_10,\n      \"20 Hz\": r.f_20,\n      \"50 Hz\": r.f_50,\n      \"100 Hz\": r.f_100,\n      \"200 Hz\": r.f_200,\n      \"500 Hz\": r.f_500\n    }))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "description": "Phase noise L(f) over time for all frequency bins. Each line is an offset frequency.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -33,12 +93,12 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
+            "insertNulls": 60000,
             "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 6,
+            "lineWidth": 1,
+            "pointSize": 4,
             "scaleDistribution": { "type": "linear" },
-            "showPoints": "always",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
             "thresholdsStyle": { "mode": "off" }
@@ -51,24 +111,18 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 1 },
-      "id": 1,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 1 },
+      "id": 20,
       "options": {
-        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Phase Noise L(f) - Latest Measurement",
+      "title": "Phase Noise L(f) Over Time (All Bins)",
       "type": "timeseries",
-      "transformations": [
-        {
-          "id": "prepareTimeSeries",
-          "options": { "format": "multi" }
-        }
-      ],
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> last()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({\n      _time: r._time,\n      \"0.2 Hz\": r.f_0p2,\n      \"0.5 Hz\": r.f_0p5,\n      \"1 Hz\": r.f_1,\n      \"2 Hz\": r.f_2,\n      \"5 Hz\": r.f_5,\n      \"10 Hz\": r.f_10,\n      \"20 Hz\": r.f_20,\n      \"50 Hz\": r.f_50,\n      \"100 Hz\": r.f_100,\n      \"200 Hz\": r.f_200,\n      \"500 Hz\": r.f_500\n    }))",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({\n      _time: r._time,\n      \"0.2 Hz\": r.f_0p2,\n      \"0.5 Hz\": r.f_0p5,\n      \"1 Hz\": r.f_1,\n      \"2 Hz\": r.f_2,\n      \"5 Hz\": r.f_5,\n      \"10 Hz\": r.f_10,\n      \"20 Hz\": r.f_20,\n      \"50 Hz\": r.f_50,\n      \"100 Hz\": r.f_100,\n      \"200 Hz\": r.f_200,\n      \"500 Hz\": r.f_500\n    }))",
           "refId": "A"
         }
       ]
