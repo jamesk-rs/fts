@@ -37,13 +37,15 @@
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 6,
-            "scaleDistribution": { "type": "log", "log": 10 },
+            "scaleDistribution": { "type": "linear" },
             "showPoints": "always",
             "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
+          "max": -60,
+          "min": -160,
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "dB"
         },
