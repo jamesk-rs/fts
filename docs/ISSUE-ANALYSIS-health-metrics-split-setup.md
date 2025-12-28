@@ -30,31 +30,32 @@ Lab PC                          Cloud
                │   - RAM        ├── InfluxDB (health bucket)
                │   - Disk       └── Grafana (shows both lab & cloud)
                │   - Docker
-               └─→ Publishes to: fts/lab/health/*
+               └─→ Publishes to: health/lab/* (separate namespace)
 ```
 
 ### Why This Solution?
 
 ✅ **Aligns with architecture:** All data flows through MQTT bridge  
-✅ **Reliable:** Leverages existing bridge queuing/reconnection  
+✅ **Reliable:** Disk-backed MQTT queue (vs memory-only Telegraf buffer)  
 ✅ **Secure:** Uses existing MQTT authentication  
-✅ **Scalable:** Easy to add multiple labs  
+✅ **Scalable:** Easy to add multiple labs with site tagging  
 ✅ **Minimal overhead:** ~50MB RAM, ~1 KB/sec network  
 
 ### Alternatives Considered
 
-❌ **Direct InfluxDB writes:** Security risk, no queuing, bypasses MQTT  
+❌ **Direct InfluxDB writes:** Security risk, limited queuing (memory-only buffer)  
 ❌ **Remote collection (SSH):** Complex, doesn't fit architecture  
 
 ## Implementation Plan
 
 **Estimated effort:** 4-6 hours
 
-1. **Create** `telegraf/telegraf-split-local.conf` - Lab Telegraf config with MQTT output
-2. **Update** `docker-compose.split-local.yml` - Add telegraf-lab service
-3. **Update** `telegraf/telegraf.conf` - Add MQTT consumer for `fts/lab/health/#`
-4. **Update** `README.md` - Document new architecture
-5. **Test** - Verify metrics flow: lab → MQTT → cloud → InfluxDB → Grafana
+1. **Create** `telegraf/telegraf-split-local.conf` - Lab Telegraf config with MQTT output to `health/lab/*`
+2. **Update** `mosquitto-split-local.conf.template` - Add `health/#` to bridge forwarding
+3. **Update** `docker-compose.split-local.yml` - Add telegraf-lab service
+4. **Update** `telegraf/telegraf.conf` - Add MQTT consumer for `health/lab/#` + site tagging
+5. **Update** `README.md` - Document new architecture
+6. **Test** - Verify metrics flow: lab → MQTT → bridge → cloud → InfluxDB → Grafana
 
 ## Detailed Analysis
 
@@ -74,7 +75,8 @@ See **[split-setup-health-metrics-analysis.md](split-setup-health-metrics-analys
 |----------|-------|-----------|
 | **Collection interval** | 10 seconds | Less frequent than FTS data (1s), sufficient for system metrics |
 | **Data format** | JSON | Human-readable for debugging, can optimize to line protocol later |
-| **Topic prefix** | `fts/lab/health/` | Consistent with existing topic structure |
+| **Topic prefix** | `health/lab/` | Aligns with existing health namespace (separate from `fts/`) |
+| **Site tagging** | 'lab' and 'cloud' | Distinguishes metrics from different locations |
 | **Output method** | MQTT publish | Leverages existing bridge infrastructure |
 
 ## Data Flow
@@ -98,10 +100,10 @@ Lab Telegraf → Local MQTT → Bridge → Cloud MQTT → Cloud Telegraf → Inf
 ## Testing Checklist
 
 - [ ] Deploy split-local with new Telegraf
-- [ ] Verify MQTT messages on `fts/lab/health/#` using mqtt_peek.py
+- [ ] Verify MQTT messages on `health/lab/#` using mqtt_peek.py
 - [ ] Verify cloud Telegraf logs show consumption
 - [ ] Check data in InfluxDB health bucket
-- [ ] Verify Grafana dashboards show lab metrics (tagged `host=fts-lab`)
+- [ ] Verify Grafana dashboards show lab metrics (tagged `site=lab`)
 - [ ] Test disconnection scenario (bridge down/up)
 - [ ] Verify metrics queue and catch up after reconnection
 

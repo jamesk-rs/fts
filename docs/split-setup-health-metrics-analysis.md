@@ -59,7 +59,7 @@ Lab PC                          Cloud
                │   - Disk       └── Grafana (shows both lab & cloud)
                │   - Docker
                └─→ Publishes to MQTT:
-                   fts/lab/health/*
+                   health/lab/* (separate from fts/ namespace)
 ```
 
 **Pros:**
@@ -101,12 +101,16 @@ Lab PC                          Cloud
 
 **Cons:**
 - ❌ Requires InfluxDB endpoint exposed to internet (security risk)
-- ❌ No built-in queuing if connection drops (data loss during outages)
+- ❌ Limited queuing during outages (Telegraf: memory buffer only, ~10k metrics; then drops old data)
 - ❌ Requires managing InfluxDB token on lab PC
 - ❌ Bypasses the MQTT bridging infrastructure
 - ❌ Doesn't fit the "data flows through MQTT" architecture
 
-**NOT RECOMMENDED** due to security and reliability concerns.
+**Queuing Comparison:**
+- **Telegraf buffer:** Memory-only, limited to `metric_buffer_limit` (default 10,000), drops oldest when full
+- **Mosquitto bridge:** Disk-backed persistent queue, unlimited (`max_queued_messages 0`), no data loss until disk full
+
+**NOT RECOMMENDED** due to security and inferior queuing during outages.
 
 ### Option 3: Remote Telegraf Agent
 
@@ -150,10 +154,11 @@ Lab PC                          Cloud
 # Output to local MQTT (will be bridged to cloud)
 [[outputs.mqtt]]
   servers = ["tcp://mosquitto:1883"]
-  topic_prefix = "fts/lab/health"
+  topic_prefix = "health/lab"
   data_format = "json"
   json_timestamp_units = "1ns"
   layout = "non-batch"  # One message per metric
+  # Note: Uses health/ namespace (separate from fts/)
 
 # System CPU metrics
 [[inputs.cpu]]
@@ -214,6 +219,17 @@ Add Telegraf service:
     restart: unless-stopped
 ```
 
+### 2a. Update Lab Mosquitto Bridge Configuration
+
+**File:** `fts-platform/mosquitto/mosquitto-split-local.conf.template`
+
+Add health topic to bridge forwarding (line 35):
+
+```
+topic fts/# out 1
+topic health/# out 1
+```
+
 ### 3. Update Cloud Telegraf Configuration
 
 **File:** `fts-platform/telegraf/telegraf.conf`
@@ -228,15 +244,27 @@ Add MQTT consumer for lab health metrics:
   password = "${MQTT_PASSWORD}"
   client_id = "telegraf-lab-health"
   persistent_session = true
-  topics = ["fts/lab/health/#"]
+  topics = ["health/lab/#"]
   qos = 1
   data_format = "json"
   json_time_key = "timestamp"
   json_time_format = "unix_ns"
-  tag_keys = ["host"]
+  tag_keys = ["host", "site"]
   
   # Route to health bucket (add to namepass)
   # This will be handled by the existing health bucket output
+```
+
+**Add site tag to cloud metrics:**
+Cloud Telegraf should also tag its metrics with `site=cloud` for consistency. Add processor:
+
+```toml
+# Tag cloud metrics with site
+[[processors.enum]]
+  namepass = ["cpu", "mem", "swap", "disk", "diskio", "system", "net", "docker*", "internal*"]
+  [[processors.enum.mapping]]
+    tag = "site"
+    value = "cloud"
 ```
 
 And update the health bucket output namepass to NOT exclude these:
@@ -273,7 +301,7 @@ Update the split setup architecture diagram to show lab Telegraf.
 
 2. **Verify lab Telegraf is publishing:**
    ```bash
-   ./bin/mqtt_peek.py --topic "fts/lab/health/#"
+   ./bin/mqtt_peek.py --topic "health/lab/#"
    ```
 
 3. **Verify cloud Telegraf is consuming:**
@@ -288,7 +316,8 @@ Update the split setup architecture diagram to show lab Telegraf.
 
 5. **Verify Grafana dashboards:**
    - Open System Health dashboard
-   - Should see metrics tagged with `host=fts-lab`
+   - Should see metrics tagged with `site=lab` and `site=cloud`
+   - Filter by site to view lab or cloud separately
 
 6. **Test disconnection scenario:**
    - Stop cloud Mosquitto
@@ -298,18 +327,20 @@ Update the split setup architecture diagram to show lab Telegraf.
 
 ## MQTT Topic Structure
 
-Lab health metrics will use these topics:
+Lab health metrics use the `health/` namespace (separate from `fts/` data):
 
 ```
-fts/lab/health/cpu         - CPU usage metrics
-fts/lab/health/mem         - Memory metrics
-fts/lab/health/swap        - Swap usage
-fts/lab/health/disk        - Disk usage
-fts/lab/health/diskio      - Disk I/O
-fts/lab/health/net         - Network stats
-fts/lab/health/docker      - Docker container stats
-fts/lab/health/system      - System load averages
+health/lab/cpu         - CPU usage metrics
+health/lab/mem         - Memory metrics
+health/lab/swap        - Swap usage
+health/lab/disk        - Disk usage
+health/lab/diskio      - Disk I/O
+health/lab/net         - Network stats
+health/lab/docker      - Docker container stats
+health/lab/system      - System load averages
 ```
+
+**Note:** The `health/` prefix keeps health metrics separate from FTS measurement data (`fts/` prefix). Both are bridged to cloud via Mosquitto.
 
 Each message will be JSON format with timestamp and metric fields.
 
@@ -340,6 +371,44 @@ To show both:
 2. **Lab-specific dashboard:** Create dedicated dashboard for lab PC health
 3. **Alerts:** Add Grafana alerts for lab PC high CPU/memory
 4. **Custom metrics:** Add stream-mqtt specific metrics (buffer depth, overflow count)
+
+## Telegraf Architecture: Single vs Split Instance
+
+The proposed solution runs two Telegraf instances in cloud:
+1. **Lab metrics collector** (new) - Publishes to MQTT (`health/lab/*`)
+2. **Cloud MQTT consumer + local collector** (existing) - Reads MQTT, collects cloud metrics, writes to InfluxDB
+
+### Option A: Keep Split (Recommended for Lab, Question for Cloud)
+
+**Lab PC:**
+- Separate Telegraf instance makes sense (no InfluxDB available locally)
+
+**Cloud:**
+- **Current:** One Telegraf does MQTT consumption + local collection
+- **Alternative:** Split into two instances:
+  - Instance 1: MQTT consumer only (FTS data + lab health)
+  - Instance 2: Local metrics collector only (cloud health)
+
+**Pros of splitting cloud Telegraf:**
+- Separation of concerns (data ingestion vs collection)
+- Different collection intervals (1s for FTS MQTT, 10s for health)
+- Easier to debug and restart independently
+- Can scale differently (e.g., more resources to MQTT consumer)
+
+**Cons of splitting cloud Telegraf:**
+- One more container to manage
+- Slightly more complex configuration
+
+**Recommendation:** Start with single cloud Telegraf (simpler), can split later if needed for performance/debugging.
+
+### Option B: Unified Cloud Telegraf (Current Approach)
+
+Keep one cloud Telegraf that:
+- Consumes MQTT (FTS data + lab health metrics)
+- Collects local cloud metrics
+- Writes everything to InfluxDB
+
+This is simpler and sufficient unless there are performance issues.
 
 ## Alternative Considered: InfluxDB Line Protocol
 
