@@ -979,7 +979,8 @@
             "uid": "influxdb"
           },
           "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> sample(n: 2000)",
-          "refId": "A"
+          "refId": "A",
+          "maxDataPoints": 2000
         },
         {
           "datasource": {
