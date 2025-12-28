@@ -393,7 +393,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 18
       },
       "id": 3,
       "options": {
@@ -518,7 +518,7 @@
         "h": 10,
         "w": 8,
         "x": 12,
-        "y": 8
+        "y": 18
       },
       "id": 4,
       "options": {
@@ -789,7 +789,7 @@
         "h": 13,
         "w": 8,
         "x": 12,
-        "y": 18
+        "y": 8
       },
       "id": 6,
       "options": {
@@ -834,7 +834,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 23, "w": 4, "x": 20, "y": 8 },
+      "gridPos": { "h": 23, "w": 4, "x": 20, "y": 18 },
       "id": 9,
       "options": {
         "colorMode": "value",
@@ -955,7 +955,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 8
       },
       "id": 7,
       "options": {
@@ -970,7 +970,7 @@
           "sort": "none"
         }
       },
-      "title": "Phase Error Scatter (edges, 60s mean)",
+      "title": "Phase Error Scatter (edges, sampled 2000)",
       "type": "timeseries",
       "targets": [
         {
@@ -978,9 +978,8 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> aggregateWindow(every: duration(v: int(v: v.windowPeriod) / 5), fn: last, createEmpty: false)",
-          "refId": "A",
-          "maxDataPoints": 10000
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> sample(n: 2000)",
+          "refId": "A"
         },
         {
           "datasource": {
