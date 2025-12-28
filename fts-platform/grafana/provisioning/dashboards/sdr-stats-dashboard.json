@@ -69,7 +69,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -160,7 +160,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -255,7 +255,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -410,7 +410,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Min/Mean/Max (sdr_stats, 60s rolling)",
+      "title": "Phase Error Min/Mean/Max (sdr_stats, per minute)",
       "type": "timeseries",
       "targets": [
         {
@@ -473,7 +473,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -536,7 +536,7 @@
           "sort": "none"
         }
       },
-      "title": "Jitter Percentiles (sdr_stats, 60s rolling)",
+      "title": "Jitter Percentiles (sdr_stats, per minute)",
       "type": "timeseries",
       "targets": [
         {
@@ -581,7 +581,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -687,7 +687,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -810,7 +810,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Histogram (edges, sampled 2000)",
+      "title": "Phase Error Histogram (edges, sampled 2000)",
       "type": "histogram",
       "targets": [
         {
@@ -852,7 +852,7 @@
           "valueSize": 56
         }
       },
-      "title": "Delay Stats (full dataset)",
+      "title": "Phase Error Stats (full dataset)",
       "type": "stat",
       "targets": [
         {
@@ -970,7 +970,7 @@
           "sort": "none"
         }
       },
-      "title": "Delay Scatter (edges, 10s rolling mean)",
+      "title": "Phase Error Scatter (edges, 60s mean)",
       "type": "timeseries",
       "targets": [
         {
@@ -987,7 +987,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> aggregateWindow(every: 10s, fn: mean, createEmpty: false)\n  |> set(key: \"_field\", value: \"mean_10s\")",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> aggregateWindow(every: 60s, fn: mean, createEmpty: false)\n  |> set(key: \"_field\", value: \"mean_60s\")",
           "refId": "B"
         }
       ]
