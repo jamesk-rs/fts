@@ -93,6 +93,21 @@ services:
       timeout: 10s
       retries: 3
 
+  grafana-init:
+    profiles: ["local", "split-cloud"]
+    image: curlimages/curl:latest
+    volumes:
+      - ./grafana/init-public-dashboards.sh:/init-public-dashboards.sh:ro
+    environment:
+      - GRAFANA_URL=http://grafana:3000
+      - GRAFANA_USER=admin
+      - GRAFANA_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    entrypoint: ["/bin/sh", "/init-public-dashboards.sh"]
+    depends_on:
+      grafana:
+        condition: service_healthy
+    restart: "no"
+
   stream-mqtt:
     profiles: ["local", "split-local"]
     build: ./qa
