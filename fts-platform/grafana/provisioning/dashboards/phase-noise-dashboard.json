@@ -60,61 +60,76 @@
       },
       "title": "Phase Noise Spectrum (Latest)",
       "type": "barchart",
-      "transformations": [],
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "reducers": ["lastNotNull"],
+            "labelsToFields": false
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "(.+)",
+            "renamePattern": "$1"
+          }
+        }
+      ],
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_0p2\") |> last() |> yield(name: \"0.2 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_0p2\") |> last() |> set(key: \"_field\", value: \"0.2 Hz\")",
           "refId": "A"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_0p5\") |> last() |> yield(name: \"0.5 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_0p5\") |> last() |> set(key: \"_field\", value: \"0.5 Hz\")",
           "refId": "B"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_1\") |> last() |> yield(name: \"1 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_1\") |> last() |> set(key: \"_field\", value: \"1 Hz\")",
           "refId": "C"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_2\") |> last() |> yield(name: \"2 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_2\") |> last() |> set(key: \"_field\", value: \"2 Hz\")",
           "refId": "D"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_5\") |> last() |> yield(name: \"5 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_5\") |> last() |> set(key: \"_field\", value: \"5 Hz\")",
           "refId": "E"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_10\") |> last() |> yield(name: \"10 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_10\") |> last() |> set(key: \"_field\", value: \"10 Hz\")",
           "refId": "F"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_20\") |> last() |> yield(name: \"20 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_20\") |> last() |> set(key: \"_field\", value: \"20 Hz\")",
           "refId": "G"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_50\") |> last() |> yield(name: \"50 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_50\") |> last() |> set(key: \"_field\", value: \"50 Hz\")",
           "refId": "H"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_100\") |> last() |> yield(name: \"100 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_100\") |> last() |> set(key: \"_field\", value: \"100 Hz\")",
           "refId": "I"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_200\") |> last() |> yield(name: \"200 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_200\") |> last() |> set(key: \"_field\", value: \"200 Hz\")",
           "refId": "J"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_500\") |> last() |> yield(name: \"500 Hz\")",
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise\" and r._field == \"f_500\") |> last() |> set(key: \"_field\", value: \"500 Hz\")",
           "refId": "K"
         }
       ]
