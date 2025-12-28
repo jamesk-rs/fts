@@ -516,7 +516,7 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 8,
+        "w": 12,
         "x": 12,
         "y": 18
       },
@@ -816,48 +816,6 @@
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
           "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\")\n  |> filter(fn: (r) => r[\"_field\"] == \"delay_ns\")\n  |> sample(n: 2000)",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": { "type": "influxdb", "uid": "influxdb" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "ns"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 23, "w": 4, "x": 20, "y": 18 },
-      "id": 9,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "text": {
-          "titleSize": 48,
-          "valueSize": 56
-        }
-      },
-      "title": "Phase Error Stats (full dataset)",
-      "type": "stat",
-      "targets": [
-        {
-          "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "data = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"edges\" and r[\"_field\"] == \"delay_ns\")\n\nmn = data |> min() |> map(fn: (r) => ({_field: \"min\", _value: r._value}))\navg = data |> mean() |> map(fn: (r) => ({_field: \"mean\", _value: r._value}))\nmx = data |> max() |> map(fn: (r) => ({_field: \"max\", _value: r._value}))\nstd = data |> stddev() |> map(fn: (r) => ({_field: \"stddev\", _value: r._value}))\np50 = data |> quantile(q: 0.50) |> map(fn: (r) => ({_field: \"P50\", _value: r._value}))\np90 = data |> quantile(q: 0.90) |> map(fn: (r) => ({_field: \"P90\", _value: r._value}))\np99 = data |> quantile(q: 0.99) |> map(fn: (r) => ({_field: \"P99\", _value: r._value}))\np999 = data |> quantile(q: 0.999) |> map(fn: (r) => ({_field: \"P99.9\", _value: r._value}))\n\nunion(tables: [mn, avg, mx, std, p50, p90, p99, p999])\n  |> pivot(rowKey: [], columnKey: [\"_field\"], valueColumn: \"_value\")",
           "refId": "A"
         }
       ]
