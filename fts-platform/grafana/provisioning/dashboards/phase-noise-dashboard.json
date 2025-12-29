@@ -229,7 +229,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["mean", "stdDev"], "fields": "", "values": false },
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
       "title": "RMS Jitter (Latest)",
@@ -266,7 +266,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["mean", "stdDev"], "fields": "", "values": false },
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
       "title": "RMS Phase (Latest)",
@@ -315,7 +315,7 @@
       "gridPos": { "h": 4, "w": 12, "x": 12, "y": 13 },
       "id": 12,
       "options": {
-        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "RMS Jitter Over Time",
@@ -575,7 +575,7 @@
       "gridPos": { "h": 5, "w": 12, "x": 0, "y": 29 },
       "id": 6,
       "options": {
-        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "Sample Count per Minute",
@@ -625,7 +625,7 @@
       "gridPos": { "h": 5, "w": 12, "x": 12, "y": 29 },
       "id": 7,
       "options": {
-        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "Measurement Duration",
