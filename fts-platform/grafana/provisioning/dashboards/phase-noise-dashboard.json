@@ -50,7 +50,7 @@
         "barWidth": 0.8,
         "fullHighlight": false,
         "groupWidth": 0.7,
-        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "list", "placement": "bottom", "showLegend": false },
         "orientation": "vertical",
         "showValue": "always",
         "stacking": "none",
@@ -229,7 +229,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": { "calcs": ["mean", "stdDev"], "fields": "", "values": false },
         "textMode": "auto"
       },
       "title": "RMS Jitter (Latest)",
@@ -266,7 +266,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": { "calcs": ["mean", "stdDev"], "fields": "", "values": false },
         "textMode": "auto"
       },
       "title": "RMS Phase (Latest)",
@@ -297,7 +297,7 @@
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": 90000,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
@@ -315,7 +315,7 @@
       "gridPos": { "h": 4, "w": 12, "x": 12, "y": 13 },
       "id": 12,
       "options": {
-        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "right", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "RMS Jitter Over Time",
@@ -353,7 +353,7 @@
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": 90000,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
@@ -371,7 +371,7 @@
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 },
       "id": 2,
       "options": {
-        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "L(1 Hz) Over Time",
@@ -402,7 +402,7 @@
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": 90000,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
@@ -420,7 +420,7 @@
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 },
       "id": 3,
       "options": {
-        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "L(10 Hz) Over Time",
@@ -451,7 +451,7 @@
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": 90000,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
@@ -469,7 +469,7 @@
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
       "id": 4,
       "options": {
-        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "L(100 Hz) Over Time",
@@ -500,7 +500,7 @@
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": 90000,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
@@ -518,7 +518,7 @@
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
       "id": 5,
       "options": {
-        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "L(500 Hz) Over Time",
@@ -556,7 +556,7 @@
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": 90000,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
@@ -575,7 +575,7 @@
       "gridPos": { "h": 5, "w": 12, "x": 0, "y": 29 },
       "id": 6,
       "options": {
-        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "Sample Count per Minute",
@@ -606,7 +606,7 @@
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": 90000,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
@@ -625,7 +625,7 @@
       "gridPos": { "h": 5, "w": 12, "x": 12, "y": 29 },
       "id": 7,
       "options": {
-        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "Measurement Duration",
