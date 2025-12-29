@@ -639,6 +639,313 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+      "id": 200,
+      "title": "Hourly Phase Noise (1hr FFT windows)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "description": "Single-sideband phase noise L(f) computed from 1-hour windows. Extended low-frequency range (0.01-500 Hz). Lower is better.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "L(f) [dBc/Hz]",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "hue",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineWidth": 1,
+            "scaleDistribution": { "type": "linear" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "max": -60,
+          "min": -160,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "dB"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 35 },
+      "id": 201,
+      "options": {
+        "barRadius": 0.1,
+        "barWidth": 0.8,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "orientation": "vertical",
+        "showValue": "always",
+        "stacking": "none",
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 100
+      },
+      "title": "Hourly Phase Noise Spectrum (Latest)",
+      "type": "barchart",
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "reducers": ["lastNotNull"],
+            "labelsToFields": false
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_0p01\") |> last() |> set(key: \"_field\", value: \"0.01 Hz\")",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_0p02\") |> last() |> set(key: \"_field\", value: \"0.02 Hz\")",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_0p05\") |> last() |> set(key: \"_field\", value: \"0.05 Hz\")",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_0p1\") |> last() |> set(key: \"_field\", value: \"0.1 Hz\")",
+          "refId": "D"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_0p2\") |> last() |> set(key: \"_field\", value: \"0.2 Hz\")",
+          "refId": "E"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_0p5\") |> last() |> set(key: \"_field\", value: \"0.5 Hz\")",
+          "refId": "F"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_1\") |> last() |> set(key: \"_field\", value: \"1 Hz\")",
+          "refId": "G"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_10\") |> last() |> set(key: \"_field\", value: \"10 Hz\")",
+          "refId": "H"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_100\") |> last() |> set(key: \"_field\", value: \"100 Hz\")",
+          "refId": "I"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\" and r._field == \"f_500\") |> last() |> set(key: \"_field\", value: \"500 Hz\")",
+          "refId": "J"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "description": "Hourly phase noise L(f) over time for all frequency bins (1-hour FFT windows).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "L(f) [dBc/Hz]",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": 3600000,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "max": -60,
+          "min": -160,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "dB"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 35 },
+      "id": 202,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Hourly Phase Noise L(f) Over Time",
+      "type": "timeseries",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Time": 0,
+              "01: 0.01 Hz": 1,
+              "02: 0.02 Hz": 2,
+              "03: 0.05 Hz": 3,
+              "04: 0.1 Hz": 4,
+              "05: 0.2 Hz": 5,
+              "06: 0.5 Hz": 6,
+              "07: 1 Hz": 7,
+              "08: 10 Hz": 8,
+              "09: 100 Hz": 9,
+              "10: 500 Hz": 10
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\")\n  |> filter(fn: (r) => r._field =~ /^f_/)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({\n      _time: r._time,\n      \"01: 0.01 Hz\": r.f_0p01,\n      \"02: 0.02 Hz\": r.f_0p02,\n      \"03: 0.05 Hz\": r.f_0p05,\n      \"04: 0.1 Hz\": r.f_0p1,\n      \"05: 0.2 Hz\": r.f_0p2,\n      \"06: 0.5 Hz\": r.f_0p5,\n      \"07: 1 Hz\": r.f_1,\n      \"08: 10 Hz\": r.f_10,\n      \"09: 100 Hz\": r.f_100,\n      \"10: 500 Hz\": r.f_500\n    }))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "description": "Integrated RMS phase jitter from hourly measurements",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 10 },
+            { "color": "red", "value": 50 }
+          ]},
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 45 },
+      "id": 203,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "title": "Hourly RMS Jitter",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\")\n  |> filter(fn: (r) => r._field == \"rms_jitter_ns\")\n  |> last()",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "description": "Number of delay samples used per hourly measurement (expected: ~7.2M for 2kHz pulse rate)",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 1000000 },
+            { "color": "green", "value": 7000000 }
+          ]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 45 },
+      "id": 204,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "title": "Hourly Sample Count",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\")\n  |> filter(fn: (r) => r._field == \"sample_count\")\n  |> last()",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "description": "RMS jitter from hourly measurements over time",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "RMS Jitter [ns]",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": 3600000,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "always",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 45 },
+      "id": 205,
+      "options": {
+        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Hourly RMS Jitter Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"phase_noise_hourly\")\n  |> filter(fn: (r) => r._field == \"rms_jitter_ns\")",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "refresh": "1m",

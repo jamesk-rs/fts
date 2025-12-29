@@ -124,6 +124,19 @@ services:
         limits:
           memory: 2G
 
+  phase-noise-hourly:
+    profiles: ["local", "split-cloud"]
+    build: ./phase-noise-hourly
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    environment:
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN:-changeme}
+      - INFLUX_ORG=${INFLUX_ORG:-fts}
+      - INFLUX_BUCKET=${INFLUX_BUCKET:-fts}
+    restart: unless-stopped
+
 volumes:
   mosquitto_data:
   mosquitto_log:
