@@ -1,14 +1,47 @@
 #!/bin/bash
 # FTS Experiment Tracking
 # Usage: experiment {start|event|stop|status|list} [args...]
+#
+# Stores experiment annotations in InfluxDB for correlation with time-series data.
+# See docs/EXPERIMENTS.md for design details.
 
 set -e
 
-INFLUX_URL="${INFLUX_URL:-http://localhost:8086}"
-INFLUX_TOKEN="${INFLUX_TOKEN:-fts-token-change-me}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Load .env file if it exists
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a
+    source "$PROJECT_DIR/.env"
+    set +a
+fi
+
+# InfluxDB configuration
+# For split-local: use cloud server (same as MQTT bridge host)
+# For local: use localhost
+if [ -n "$INFLUX_URL" ]; then
+    INFLUX_URL="$INFLUX_URL"
+elif [ -n "$MQTT_BRIDGE_HOST" ]; then
+    # Split setup - InfluxDB is on cloud
+    INFLUX_URL="http://${MQTT_BRIDGE_HOST}:8086"
+else
+    # Local setup
+    INFLUX_URL="http://localhost:8086"
+fi
+
+INFLUX_TOKEN="${INFLUX_TOKEN:-${INFLUX_ADMIN_TOKEN:-changeme}}"
 INFLUX_ORG="${INFLUX_ORG:-fts}"
 INFLUX_BUCKET="${INFLUX_BUCKET:-fts}"
 STATE_FILE="/tmp/fts-experiment-current"
+
+# Debug: show config if -v flag
+if [ "$1" = "-v" ] || [ "$1" = "--verbose" ]; then
+    echo "InfluxDB URL: $INFLUX_URL"
+    echo "InfluxDB Org: $INFLUX_ORG"
+    echo "InfluxDB Bucket: $INFLUX_BUCKET"
+    shift
+fi
 
 write_event() {
     local experiment="$1"
@@ -17,14 +50,32 @@ write_event() {
     local timestamp_ns=$(date +%s%N)
 
     # Escape special characters in description for line protocol
-    description=$(echo "$description" | sed 's/"/\\"/g')
+    description=$(echo "$description" | sed 's/"/\\"/g' | sed 's/ /\\ /g')
 
     # Write to InfluxDB using line protocol
-    curl -s -X POST "${INFLUX_URL}/api/v2/write?org=${INFLUX_ORG}&bucket=${INFLUX_BUCKET}&precision=ns" \
+    local response
+    response=$(curl -s -w "\n%{http_code}" -X POST "${INFLUX_URL}/api/v2/write?org=${INFLUX_ORG}&bucket=${INFLUX_BUCKET}&precision=ns" \
         -H "Authorization: Token ${INFLUX_TOKEN}" \
         -H "Content-Type: text/plain" \
-        -d "experiments,experiment=${experiment},type=${event_type} description=\"${description}\" ${timestamp_ns}" \
-        > /dev/null
+        -d "experiments,experiment=${experiment},type=${event_type} description=\"${description}\" ${timestamp_ns}" 2>&1)
+
+    local http_code=$(echo "$response" | tail -1)
+    local body=$(echo "$response" | head -n -1)
+
+    if [ "$http_code" != "204" ] && [ "$http_code" != "200" ]; then
+        echo "Error writing to InfluxDB (HTTP $http_code): $body" >&2
+        echo "URL: $INFLUX_URL" >&2
+        return 1
+    fi
+}
+
+query_influx() {
+    local query="$1"
+    curl -s -X POST "${INFLUX_URL}/api/v2/query?org=${INFLUX_ORG}" \
+        -H "Authorization: Token ${INFLUX_TOKEN}" \
+        -H "Content-Type: application/vnd.flux" \
+        -H "Accept: application/csv" \
+        -d "$query"
 }
 
 cmd="${1:-}"
@@ -92,23 +143,52 @@ case "$cmd" in
         ;;
 
     list|ls)
-        echo "Experiments:"
-        curl -s -X POST "${INFLUX_URL}/api/v2/query?org=${INFLUX_ORG}" \
-            -H "Authorization: Token ${INFLUX_TOKEN}" \
-            -H "Content-Type: application/vnd.flux" \
-            -d 'from(bucket: "fts")
-  |> range(start: 0)
-  |> filter(fn: (r) => r._measurement == "experiments")
-  |> filter(fn: (r) => r.type == "start")
-  |> keep(columns: ["_time", "experiment", "_value"])
-  |> sort(columns: ["_time"], desc: true)' \
-            | grep -oP '(?<=,)[^,]+(?=,start,)' 2>/dev/null | sort -u || echo "(none found)"
+        # Query for unique experiments with their start times
+        result=$(query_influx 'from(bucket: "fts") |> range(start: -365d) |> filter(fn: (r) => r._measurement == "experiments") |> filter(fn: (r) => r.type == "start") |> keep(columns: ["_time", "experiment", "_value"]) |> group(columns: ["experiment"]) |> sort(columns: ["_time"], desc: true) |> first()')
+
+        if echo "$result" | grep -q "unauthorized"; then
+            echo "Error: Unauthorized. Check INFLUX_TOKEN in .env" >&2
+            exit 1
+        fi
+
+        if echo "$result" | grep -q "error"; then
+            echo "Error querying InfluxDB:" >&2
+            echo "$result" >&2
+            exit 1
+        fi
+
+        # Parse CSV output - columns: ,result,table,_time,_value,experiment (skip header line)
+        echo "Experiments (most recent first):"
+        parsed=$(echo "$result" | grep -v "^#" | grep -v "^$" | tail -n +2 | \
+            awk -F',' '{ if ($6 != "" && $6 != "experiment") { t=$4; gsub(/T/, " ", t); gsub(/Z/, "", t); sub(/\.[0-9]+/, "", t); print "  " t "  " $6 } }' | sort -r | head -20)
+
+        if [ -n "$parsed" ]; then
+            echo "$parsed"
+        else
+            echo "  (no experiments found)"
+        fi
+        ;;
+
+    show)
+        if [ -z "$1" ]; then
+            echo "Usage: experiment show <name>"
+            exit 1
+        fi
+        experiment_name="$1"
+
+        # Query all events for this experiment
+        result=$(query_influx "from(bucket: \"fts\") |> range(start: -365d) |> filter(fn: (r) => r._measurement == \"experiments\") |> filter(fn: (r) => r.experiment == \"${experiment_name}\") |> keep(columns: [\"_time\", \"type\", \"_value\"]) |> sort(columns: [\"_time\"])")
+
+        # CSV columns: ,result,table,_time,_value,type (skip header line)
+        echo "Events for experiment '$experiment_name':"
+        echo "$result" | grep -v "^#" | grep -v "^$" | tail -n +2 | \
+            awk -F',' '{ if ($6 != "" && $6 != "type") { t=$4; gsub(/T/, " ", t); gsub(/Z/, "", t); sub(/\.[0-9]+/, "", t); d=$5; gsub(/\\/, "", d); print "  " t "  [" $6 "] " d } }'
         ;;
 
     *)
         echo "FTS Experiment Tracking"
         echo ""
-        echo "Usage: $(basename "$0") <command> [args...]"
+        echo "Usage: $(basename "$0") [-v] <command> [args...]"
         echo ""
         echo "Commands:"
         echo "  start <name> [desc]  - Start a new experiment"
@@ -116,14 +196,26 @@ case "$cmd" in
         echo "  stop [description]   - Stop current experiment"
         echo "  status               - Show current experiment"
         echo "  list                 - List all experiments"
+        echo "  show <name>          - Show events for an experiment"
+        echo ""
+        echo "Options:"
+        echo "  -v, --verbose        - Show configuration before running"
         echo ""
         echo "Shortcuts: e=event, s=status, ls=list"
+        echo ""
+        echo "Configuration (via .env or environment):"
+        echo "  INFLUX_URL           - InfluxDB URL (auto-detected from MQTT_BRIDGE_HOST)"
+        echo "  INFLUX_TOKEN         - InfluxDB API token"
+        echo "  INFLUX_ORG           - InfluxDB organization (default: fts)"
+        echo "  INFLUX_BUCKET        - InfluxDB bucket (default: fts)"
         echo ""
         echo "Examples:"
         echo "  $(basename "$0") start distance-test-001 'Testing range limits'"
         echo "  $(basename "$0") event 'all devices on desktop'"
         echo "  $(basename "$0") e 'master moved 10m away'"
         echo "  $(basename "$0") stop"
+        echo "  $(basename "$0") list"
+        echo "  $(basename "$0") show distance-test-001"
         exit 1
         ;;
 esac
