@@ -152,7 +152,7 @@
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": 90000,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 1,
             "pointSize": 4,
             "scaleDistribution": { "type": "linear" },
@@ -172,7 +172,7 @@
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 1 },
       "id": 20,
       "options": {
-        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "legend": { "calcs": ["mean", "stdDev"], "displayMode": "table", "placement": "right", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "title": "Phase Noise L(f) Over Time (All Bins)",
