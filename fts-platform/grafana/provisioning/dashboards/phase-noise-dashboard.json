@@ -1,12 +1,36 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "name": "Show annotations",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> keep(columns: [\"_time\", \"_value\", \"experiment\", \"type\"])",
+        "textColumn": "_value",
+        "tagsColumn": "experiment,type"
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "clock",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "⏱ Go to Experiment",
+      "tooltip": "Navigate to the selected experiment's time range",
+      "type": "link",
+      "url": "/d/phase-noise?orgId=1&from=${exp_start}&to=${exp_end}&refresh=5s&var-experiment=${experiment}"
+    }
+  ],
   "liveNow": true,
   "panels": [
     {
@@ -643,7 +667,58 @@
   "schemaVersion": 39,
   "tags": ["fts", "phase-noise", "sdr"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": "__all__",
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "definition": "Experiments",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Experiment",
+        "multi": false,
+        "name": "experiment",
+        "options": [],
+        "query": "from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.type == \"start\")\n  |> keep(columns: [\"experiment\"])\n  |> distinct(column: \"experiment\")",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "definition": "Experiment Start",
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "exp_start",
+        "options": [],
+        "query": "import \"array\"\n\nexpData = from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.experiment == \"${experiment}\")\n  |> filter(fn: (r) => r.type == \"start\")\n  |> last()\n  |> map(fn: (r) => ({_value: string(v: uint(v: r._time) / uint(v: 1000000)), priority: 0}))\n\nfallback = array.from(rows: [{_value: \"now-5m\", priority: 1}])\n\nunion(tables: [expData, fallback])\n  |> group()\n  |> sort(columns: [\"priority\"])\n  |> limit(n: 1)\n  |> keep(columns: [\"_value\"])",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": true,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "definition": "Experiment End",
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "exp_end",
+        "options": [],
+        "query": "import \"array\"\n\nexpData = from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.experiment == \"${experiment}\")\n  |> filter(fn: (r) => r.type == \"stop\")\n  |> last()\n  |> map(fn: (r) => ({_value: string(v: uint(v: r._time) / uint(v: 1000000)), priority: 0}))\n\nfallback = array.from(rows: [{_value: \"now\", priority: 1}])\n\nunion(tables: [expData, fallback])\n  |> group()\n  |> sort(columns: [\"priority\"])\n  |> limit(n: 1)\n  |> keep(columns: [\"_value\"])",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": true,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
   },
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
