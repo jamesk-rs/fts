@@ -35,6 +35,16 @@ INFLUX_ORG="${INFLUX_ORG:-fts}"
 INFLUX_BUCKET="${INFLUX_BUCKET:-fts}"
 STATE_FILE="/tmp/fts-experiment-current"
 
+# Validate that a string doesn't contain backslashes
+check_no_backslash() {
+    local value="$1"
+    local name="$2"
+    if [[ "$value" == *\\* ]]; then
+        echo "Error: $name cannot contain backslashes: $value" >&2
+        exit 1
+    fi
+}
+
 # Debug: show config if -v flag
 if [ "$1" = "-v" ] || [ "$1" = "--verbose" ]; then
     echo "InfluxDB URL: $INFLUX_URL"
@@ -50,7 +60,8 @@ write_event() {
     local timestamp_ns=$(date +%s%N)
 
     # Escape special characters in description for line protocol
-    description=$(echo "$description" | sed 's/"/\\"/g' | sed 's/ /\\ /g')
+    # Only need to escape backslashes and quotes since value is inside double quotes
+    description=$(echo "$description" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
 
     # Write to InfluxDB using line protocol
     local response
@@ -87,8 +98,14 @@ case "$cmd" in
             echo "Usage: experiment start <name> [description]"
             exit 1
         fi
+        if [ $# -gt 2 ]; then
+            echo "Error: too many arguments. Usage: experiment start <name> [description]" >&2
+            exit 1
+        fi
         experiment_name="$1"
         description="${2:-Experiment started}"
+        check_no_backslash "$experiment_name" "experiment name"
+        check_no_backslash "$description" "description"
 
         if [ -f "$STATE_FILE" ]; then
             current=$(cat "$STATE_FILE")
@@ -106,7 +123,13 @@ case "$cmd" in
             echo "Usage: experiment event <description>"
             exit 1
         fi
+        if [ $# -gt 1 ]; then
+            echo "Error: too many arguments. Usage: experiment event <description>" >&2
+            echo "Hint: wrap description in quotes if it contains spaces" >&2
+            exit 1
+        fi
         description="$1"
+        check_no_backslash "$description" "description"
 
         if [ -f "$STATE_FILE" ]; then
             experiment_name=$(cat "$STATE_FILE")
@@ -124,9 +147,14 @@ case "$cmd" in
             echo "No active experiment to stop"
             exit 1
         fi
+        if [ $# -gt 1 ]; then
+            echo "Error: too many arguments. Usage: experiment stop [description]" >&2
+            exit 1
+        fi
 
         experiment_name=$(cat "$STATE_FILE")
         description="${1:-Experiment ended}"
+        check_no_backslash "$description" "description"
 
         write_event "$experiment_name" "stop" "$description"
         rm -f "$STATE_FILE"
@@ -172,6 +200,10 @@ case "$cmd" in
     show)
         if [ -z "$1" ]; then
             echo "Usage: experiment show <name>"
+            exit 1
+        fi
+        if [ $# -gt 1 ]; then
+            echo "Error: too many arguments. Usage: experiment show <name>" >&2
             exit 1
         fi
         experiment_name="$1"
