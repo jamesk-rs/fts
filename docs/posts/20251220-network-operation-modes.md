@@ -1,10 +1,17 @@
-# Network Architecture
-
-## Operation Modes
+---
+title: Network Operation Modes
+date: 2025-12-20
+nav_order: 3
+has_toc: true
+---
+# Network Operation Modes
 
 FTS supports three network modes for timing synchronization and telemetry uplink.
 
-### Internal AP Mode (`CONFIG_FTS_MODE_INTERNAL_AP`)
+## Table of Contents
+- TOC
+{:toc}
+## Internal AP Mode (`CONFIG_FTS_MODE_INTERNAL_AP`)
 
 Master runs as WiFi Access Point. Slaves connect to master's AP.
 
@@ -13,7 +20,7 @@ Master runs as WiFi Access Point. Slaves connect to master's AP.
 - **FTM**: shares channel with master's AP
 - **Telemetry**: via master's network (master routes to broker)
 
-### External AP Mode (`CONFIG_FTS_MODE_EXTERNAL_AP`)
+## External AP Mode (`CONFIG_FTS_MODE_EXTERNAL_AP`)
 
 All devices connect to an external WiFi AP.
 
@@ -25,7 +32,7 @@ All devices connect to an external WiFi AP.
 Note: Slave might end up on different channel from the master.
 This is detected at master discovery phase and WiFi reconnects hoping to get more lucky next time.
 
-### USB-NCM Mode (`CONFIG_FTS_MODE_USB_NCM`)
+## USB-NCM Mode (`CONFIG_FTS_MODE_USB_NCM`)
 
 ESP-NOW for timing sync, USB-NCM for telemetry uplink. Requires ESP32-S3.
 
@@ -33,26 +40,6 @@ ESP-NOW for timing sync, USB-NCM for telemetry uplink. Requires ESP32-S3.
 - **Telemetry**: via USB-NCM to Linux host
 - ESP32 acts as USB network device (DHCP client)
 - Linux host provides DHCP server and routes to MQTT broker
-
-#### Linux Host Setup
-
-```bash
-# Set up USB interface (appears as usb0 or enx*)
-sudo ip link set usb0 up
-sudo ip addr add 192.168.7.1/24 dev usb0
-
-# Run DHCP server
-sudo dnsmasq -d -i usb0 --dhcp-range=192.168.7.2,192.168.7.10,12h
-
-# Enable IP forwarding for MQTT access
-sudo sysctl -w net.ipv4.ip_forward=1
-sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-```
-
-## MQTT
-
-Static broker URL configured at build time (`CONFIG_FTS_MQTT_BROKER_URI`).
-Works in all modes - broker can be on master's network, external AP, or via USB uplink.
 
 ## Master Discovery
 

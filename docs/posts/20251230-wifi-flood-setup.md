@@ -1,7 +1,7 @@
 ---
 title: WiFi Flood Test Setup
 date: 2025-12-30
-nav_order: 2
+nav_order: 101
 has_toc: true
 ---
 # WiFi Flood Test Setup
@@ -42,7 +42,7 @@ Stations run Debian Linux.
 Their wired ethernet ports are plugged into LAN, we can ssh into Linux hosts to run commands.
 
 ### Setup RPI5A to connect to OpenWRT1
-```
+```bash
 nmcli connection add \
   type wifi \
   ifname wlan0 \
@@ -59,7 +59,7 @@ nmcli connection up openwrt1
 ```
 
 ### Setup RPI5B to connect to OpenWRT2
-```
+```bash
 nmcli connection add \
   type wifi \
   ifname wlan0 \
@@ -76,7 +76,7 @@ nmcli connection up openwrt2
 ```
 
 ### Setup bb1 to connect to OpenWrt1
-```
+```bash
 nmcli connection add \
   type wifi \
   ifname wlan0 \
@@ -93,7 +93,7 @@ nmcli connection up openwrt1
 ```
 
 ### Setup bb2 to connect to OpenWrt2
-```
+```bash
 nmcli connection add \
   type wifi \
   ifname wlan0 \
@@ -112,17 +112,17 @@ nmcli connection up openwrt2
 ## Flood Tests
 
 From BB1 flood RPI5A:
-```
+```bash
 ssh debian@bb1.local iperf3 -c 192.168.1.232  -u -b 30000000 -t 0
 ```
 
 From BB2 flood RPI5B:
-```
+```bash
 ssh debian@bb2.local iperf3 -c 192.168.2.235  -u -b 30000000 -t 0
 ```
 
 There is also a packet injection scripts which can be run from shuttle, but it has a marginal impact:
-```
+```bash
 sudo .venv/bin/python3 fts-platform/qa/bin/wifi_flood.py -d 0 -i wlx00c0ca7505c3 --channel 1
 
 sudo .venv/bin/python3 fts-platform/qa/bin/wifi_flood.py -d 0 -i wlx00c0ca6d0c4b --channel 1
