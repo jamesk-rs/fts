@@ -98,7 +98,7 @@ sudo minicom -b 115200 -D /dev/ttyAMA0 -C log0
 
 All ESP32 S3 devices implement USB NCM, if CONFIG_FTS_MODE_USB_NCM is set. When plugged into a Linux host they act as a USB-connected Ethernet station.
 
-## Linux Bridge Configuration
+### Linux Bridge Configuration
 
 Linux host acts as a bridge and DHCP server for them:
 ```yaml
@@ -132,7 +132,7 @@ network:
 dnsmasq --interface=br1 --bind-interfaces --dhcp-range=192.168.7.100,192.168.7.110,12h --port=0
 ```
 
-## Known Issues
+### Known Issues
 
 For some reason bridging into LAN is not working, might have something to do with:
 * the fact docker runs on Linux and somehow screws up the bridging process,
@@ -141,7 +141,7 @@ For some reason bridging into LAN is not working, might have something to do wit
 
 The last one is the most likely, because if we activate debug there we see DHCP offer makes its way to ESP32 but it ignores it for some reason. So have to plug into a dedicated bridge and run local DHCP server there.
 
-## Workaround for Raspberry Pi
+### Workaround for Raspberry Pi
 
 For rPi need to ROUTE/MASQUERADE (TODO) or pass through:
 ```bash

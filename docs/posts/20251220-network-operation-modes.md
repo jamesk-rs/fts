@@ -11,7 +11,9 @@ FTS supports three network modes for timing synchronization and telemetry uplink
 ## Table of Contents
 - TOC
 {:toc}
-## Internal AP Mode (`CONFIG_FTS_MODE_INTERNAL_AP`)
+
+## Network Operation Modes
+### Internal AP Mode (`CONFIG_FTS_MODE_INTERNAL_AP`)
 
 Master runs as WiFi Access Point. Slaves connect to master's AP.
 
@@ -20,7 +22,7 @@ Master runs as WiFi Access Point. Slaves connect to master's AP.
 - **FTM**: shares channel with master's AP
 - **Telemetry**: via master's network (master routes to broker)
 
-## External AP Mode (`CONFIG_FTS_MODE_EXTERNAL_AP`)
+### External AP Mode (`CONFIG_FTS_MODE_EXTERNAL_AP`)
 
 All devices connect to an external WiFi AP.
 
@@ -32,7 +34,7 @@ All devices connect to an external WiFi AP.
 Note: Slave might end up on different channel from the master.
 This is detected at master discovery phase and WiFi reconnects hoping to get more lucky next time.
 
-## USB-NCM Mode (`CONFIG_FTS_MODE_USB_NCM`)
+### USB-NCM Mode (`CONFIG_FTS_MODE_USB_NCM`)
 
 ESP-NOW for timing sync, USB-NCM for telemetry uplink. Requires ESP32-S3.
 
