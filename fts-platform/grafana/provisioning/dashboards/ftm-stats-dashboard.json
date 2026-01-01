@@ -112,7 +112,7 @@
           "sort": "none"
         }
       },
-      "title": "Slave1 - FTM Status",
+      "title": "${device1} -FTM Status",
       "type": "timeseries",
       "targets": [
         {
@@ -120,7 +120,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"status\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"status\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
           "refId": "A"
         }
       ]
@@ -204,7 +204,7 @@
           "sort": "none"
         }
       },
-      "title": "Slave2 - FTM Status",
+      "title": "${device2} -FTM Status",
       "type": "timeseries",
       "targets": [
         {
@@ -212,7 +212,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"status\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"status\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
           "refId": "A"
         }
       ]
@@ -292,7 +292,7 @@
           "sort": "none"
         }
       },
-      "title": "Slave1 - FTM Count",
+      "title": "${device1} -FTM Count",
       "type": "timeseries",
       "targets": [
         {
@@ -300,7 +300,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
           "refId": "A"
         }
       ]
@@ -380,7 +380,7 @@
           "sort": "none"
         }
       },
-      "title": "Slave2 - FTM Count",
+      "title": "${device2} -FTM Count",
       "type": "timeseries",
       "targets": [
         {
@@ -388,7 +388,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
           "refId": "A"
         }
       ]
@@ -515,7 +515,7 @@
           "sort": "none"
         }
       },
-      "title": "Slave1 - RSSI (Avg/Min/Max)",
+      "title": "${device1} -RSSI (Avg/Min/Max)",
       "type": "timeseries",
       "targets": [
         {
@@ -523,7 +523,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"rssi_avg\" or r[\"_field\"] == \"rssi_min\" or r[\"_field\"] == \"rssi_max\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"rssi_avg\" or r[\"_field\"] == \"rssi_min\" or r[\"_field\"] == \"rssi_max\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
           "refId": "A"
         }
       ]
@@ -650,7 +650,7 @@
           "sort": "none"
         }
       },
-      "title": "Slave2 - RSSI (Avg/Min/Max)",
+      "title": "${device2} -RSSI (Avg/Min/Max)",
       "type": "timeseries",
       "targets": [
         {
@@ -658,7 +658,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"rssi_avg\" or r[\"_field\"] == \"rssi_min\" or r[\"_field\"] == \"rssi_max\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"rssi_avg\" or r[\"_field\"] == \"rssi_min\" or r[\"_field\"] == \"rssi_max\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
           "refId": "A"
         }
       ]
@@ -777,7 +777,7 @@
           "sort": "none"
         }
       },
-      "title": "Slave1 - RTT (Avg/Min/Max)",
+      "title": "${device1} -RTT (Avg/Min/Max)",
       "type": "timeseries",
       "targets": [
         {
@@ -785,7 +785,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"rtt_avg_ps\" or r[\"_field\"] == \"rtt_min_ps\" or r[\"_field\"] == \"rtt_max_ps\")\n  |> map(fn: (r) => ({r with _value: float(v: r._value) / 1000.0}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"rtt_avg_ps\" or r[\"_field\"] == \"rtt_min_ps\" or r[\"_field\"] == \"rtt_max_ps\")\n  |> map(fn: (r) => ({r with _value: float(v: r._value) / 1000.0}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
           "refId": "A"
         }
       ]
@@ -904,7 +904,7 @@
           "sort": "none"
         }
       },
-      "title": "Slave2 - RTT (Avg/Min/Max)",
+      "title": "${device2} -RTT (Avg/Min/Max)",
       "type": "timeseries",
       "targets": [
         {
@@ -912,7 +912,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"rtt_avg_ps\" or r[\"_field\"] == \"rtt_min_ps\" or r[\"_field\"] == \"rtt_max_ps\")\n  |> map(fn: (r) => ({r with _value: float(v: r._value) / 1000.0}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"rtt_avg_ps\" or r[\"_field\"] == \"rtt_min_ps\" or r[\"_field\"] == \"rtt_max_ps\")\n  |> map(fn: (r) => ({r with _value: float(v: r._value) / 1000.0}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
           "refId": "A"
         }
       ]
@@ -945,7 +945,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 23
+        "y": 30
       },
       "id": 9,
       "options": {
@@ -961,7 +961,7 @@
           "sort": "none"
         }
       },
-      "title": "RSSI Distribution (All Slaves)",
+      "title": "${device1} - RSSI Distribution",
       "type": "histogram",
       "targets": [
         {
@@ -969,7 +969,121 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"rssi_avg\")",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"rssi_avg\")",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "dBm"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "id": 10,
+      "options": {
+        "bucketCount": 30,
+        "legend": {
+          "calcs": ["mean", "stdDev"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "title": "${device2} - RSSI Distribution",
+      "type": "histogram",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"rssi_avg\")",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "id": 11,
+      "options": {
+        "bucketCount": 30,
+        "legend": {
+          "calcs": ["mean", "stdDev"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "title": "${device1} - RTT Distribution",
+      "type": "histogram",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"rtt_avg_ps\")\n  |> map(fn: (r) => ({r with _value: float(v: r._value) / 1000.0}))",
           "refId": "A"
         }
       ]
@@ -1004,7 +1118,7 @@
         "x": 12,
         "y": 23
       },
-      "id": 10,
+      "id": 12,
       "options": {
         "bucketCount": 30,
         "legend": {
@@ -1018,7 +1132,7 @@
           "sort": "none"
         }
       },
-      "title": "RTT Distribution (All Slaves)",
+      "title": "${device2} - RTT Distribution",
       "type": "histogram",
       "targets": [
         {
@@ -1026,7 +1140,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"_field\"] == \"rtt_avg_ps\")\n  |> map(fn: (r) => ({r with _value: float(v: r._value) / 1000.0}))",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ftm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"rtt_avg_ps\")\n  |> map(fn: (r) => ({r with _value: float(v: r._value) / 1000.0}))",
           "refId": "A"
         }
       ]
@@ -1037,6 +1151,40 @@
   "tags": ["fts", "ftm", "stats"],
   "templating": {
     "list": [
+      {
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "definition": "Device 1",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Device 1",
+        "multi": true,
+        "name": "device1",
+        "options": [],
+        "query": "import \"array\"\n\ndevices = from(bucket: \"fts\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r._measurement == \"ftm\" or r._measurement == \"ftm_stats\" or r._measurement == \"crm_stats\")\n  |> keep(columns: [\"device\"])\n  |> distinct(column: \"device\")\n\nnone_option = array.from(rows: [{device: \"None\"}])\n\nunion(tables: [none_option, devices])\n  |> sort(columns: [\"device\"])",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "definition": "Device 2",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Device 2",
+        "multi": true,
+        "name": "device2",
+        "options": [],
+        "query": "import \"array\"\n\ndevices = from(bucket: \"fts\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r._measurement == \"ftm\" or r._measurement == \"ftm_stats\" or r._measurement == \"crm_stats\")\n  |> keep(columns: [\"device\"])\n  |> distinct(column: \"device\")\n\nnone_option = array.from(rows: [{device: \"None\"}])\n\nunion(tables: [none_option, devices])\n  |> sort(columns: [\"device\"])",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
       {
         "allValue": "__all__",
         "current": {},
