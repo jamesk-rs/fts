@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
             NO_RESET=true
             shift
             ;;
-        master|master2|slave1|slave2|slave3|slave4|slave5|slaves|all)
+        master|master2|slave1|slave2|slave3|slave4|slave5|slave6|slaves|all)
             TARGETS+=("$1")
             shift
             ;;
@@ -70,8 +70,9 @@ while [[ $# -gt 0 ]]; do
             echo "    slave3      - Slave 3 only (not included in 'all' or 'slaves')"
             echo "    slave4      - Slave 4 only (not included in 'all' or 'slaves')"
             echo "    slave5      - Slave 5 only (not included in 'all' or 'slaves')"
-            echo "    slaves      - Slave 1 and 2 (not slave3/slave4/slave5)"
-            echo "    all         - Master + slave1 + slave2 (not master2/slave3/slave4/slave5) [default]"
+            echo "    slave6      - Slave 6 only (not included in 'all' or 'slaves')"
+            echo "    slaves      - Slave 1 and 2 (not slave3-6)"
+            echo "    all         - Master + slave1 + slave2 (not master2/slave3-6) [default]"
             echo "  If no actions specified, defaults to 'build'"
             echo "  If no targets specified, defaults to 'all'"
             exit 1
@@ -113,6 +114,7 @@ NEED_SLAVE2=false
 NEED_SLAVE3=false
 NEED_SLAVE4=false
 NEED_SLAVE5=false
+NEED_SLAVE6=false
 
 if has_target "all" || has_target "master"; then
     NEED_MASTER=true
@@ -135,9 +137,13 @@ fi
 if has_target "slave4"; then
     NEED_SLAVE4=true
 fi
-# slave5 (is NOT included in 'all' or 'slaves' - must be explicitly targeted
+# slave5 is NOT included in 'all' or 'slaves' - must be explicitly targeted
 if has_target "slave5"; then
     NEED_SLAVE5=true
+fi
+# slave6 is NOT included in 'all' or 'slaves' - must be explicitly targeted
+if has_target "slave6"; then
+    NEED_SLAVE6=true
 fi
 
 # Function to clean/build a firmware type
@@ -180,6 +186,11 @@ build_firmware() {
             build_dir="$BUILDDIR_SLAVE_5"
             sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave5"
             idf_target="$TARGET_SLAVE_5"
+            ;;
+        slave6)
+            build_dir="$BUILDDIR_SLAVE_6"
+            sdkconfig_defaults="sdkconfig.defaults;sdkconfig.defaults.fts_slave6"
+            idf_target="$TARGET_SLAVE_6"
             ;;
     esac
 
@@ -240,6 +251,9 @@ if [[ "$DO_CLEAN" == true || "$DO_BUILD" == true ]]; then
     if [[ "$NEED_SLAVE5" == true ]]; then
         build_firmware "slave5"
     fi
+    if [[ "$NEED_SLAVE6" == true ]]; then
+        build_firmware "slave6"
+    fi
 fi
 
 # Phase 2: Flash to devices
@@ -272,6 +286,10 @@ if [[ "$DO_FLASH" == true ]]; then
     if has_target "slave5"; then
         flash_device "SLAVE 5" "$BUILDDIR_SLAVE_5" "$SERIAL_PORT_SLAVE_5"
     fi
+    # slave6 is NOT included in 'all' or 'slaves' - must be explicitly targeted
+    if has_target "slave6"; then
+        flash_device "SLAVE 6" "$BUILDDIR_SLAVE_6" "$SERIAL_PORT_SLAVE_6"
+    fi
 fi
 
 # Phase 3: Monitor
@@ -285,16 +303,17 @@ if [[ "$DO_MONITOR" == true ]]; then
     MON_SLAVE3=false
     MON_SLAVE4=false
     MON_SLAVE5=false
+    MON_SLAVE6=false
 
     if has_target "all"; then
         MON_MASTER=true; MON_SLAVE1=true; MON_SLAVE2=true
-        # master2/slave3/slave4/slave5 are NOT included in 'all'
+        # master2/slave3/slave4/slave5/slave6 are NOT included in 'all'
     else
         has_target "master" && MON_MASTER=true
         has_target "master2" && MON_MASTER_2=true
         if has_target "slaves"; then
             MON_SLAVE1=true; MON_SLAVE2=true
-            # slave3/slave4/slave5 are NOT included in 'slaves'
+            # slave3/slave4/slave5/slave6 are NOT included in 'slaves'
         else
             has_target "slave1" && MON_SLAVE1=true
             has_target "slave2" && MON_SLAVE2=true
@@ -302,6 +321,7 @@ if [[ "$DO_MONITOR" == true ]]; then
         has_target "slave3" && MON_SLAVE3=true
         has_target "slave4" && MON_SLAVE4=true
         has_target "slave5" && MON_SLAVE5=true
+        has_target "slave6" && MON_SLAVE6=true
     fi
 
     # Count monitors needed
@@ -313,6 +333,7 @@ if [[ "$DO_MONITOR" == true ]]; then
     $MON_SLAVE3 && ((MON_COUNT++)) || true
     $MON_SLAVE4 && ((MON_COUNT++)) || true
     $MON_SLAVE5 && ((MON_COUNT++)) || true
+    $MON_SLAVE6 && ((MON_COUNT++)) || true
 
     # Create output directory if specified
     if [[ -n "$OUTPUT_DIR" ]]; then
@@ -371,6 +392,12 @@ if [[ "$DO_MONITOR" == true ]]; then
             TS_ARGS=""
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave5.log"
             stdbuf -oL idf.py -B $BUILDDIR_SLAVE_5 -p $SERIAL_PORT_SLAVE_5 monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
+        elif $MON_SLAVE6; then
+            echo "Monitoring SLAVE 6..."
+            . $ESP_IDF_EXPORT > /dev/null 2>&1
+            TS_ARGS=""
+            [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o $OUTPUT_DIR/slave6.log"
+            stdbuf -oL idf.py -B $BUILDDIR_SLAVE_6 -p $SERIAL_PORT_SLAVE_6 monitor $MONITOR_ARGS 2>&1 | "$SCRIPT_DIR/ts_us.py" $TS_ARGS
         fi
     else
         # Multiple monitors - use tmux
@@ -462,6 +489,18 @@ if [[ "$DO_MONITOR" == true ]]; then
             [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave5.log'"
             tmux send-keys -t fts_monitor \
                 "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_5 -p $SERIAL_PORT_SLAVE_5 monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
+        fi
+
+        if $MON_SLAVE6; then
+            if $FIRST_PANE; then
+                FIRST_PANE=false
+            else
+                tmux split-window -t fts_monitor -v
+            fi
+            TS_ARGS=""
+            [[ -n "$OUTPUT_DIR" ]] && TS_ARGS="-o '$OUTPUT_DIR/slave6.log'"
+            tmux send-keys -t fts_monitor \
+                "cd '$PROJECT_DIR' && source $ESP_IDF_EXPORT && stdbuf -oL idf.py -B $BUILDDIR_SLAVE_6 -p $SERIAL_PORT_SLAVE_6 monitor $MONITOR_ARGS 2>&1 | '$SCRIPT_DIR/ts_us.py' $TS_ARGS" C-m
         fi
 
         # Balance panes and attach
