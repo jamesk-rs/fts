@@ -9,3 +9,11 @@ providers:
     editable: true
     options:
       path: /etc/grafana/provisioning/dashboards
+  - name: 'Old Dashboards'
+    orgId: 1
+    folder: 'Old'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/old
