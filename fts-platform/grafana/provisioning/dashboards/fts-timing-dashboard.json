@@ -7,8 +7,8 @@
         "hide": false,
         "iconColor": "rgba(255, 96, 96, 1)",
         "name": "Show annotations",
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> keep(columns: [\"_time\", \"_value\", \"experiment\", \"type\"])",
-        "textColumn": "_value",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> map(fn: (r) => ({r with text: r.experiment + \": \" + r._value}))\n  |> keep(columns: [\"_time\", \"text\", \"experiment\", \"type\"])",
+        "textColumn": "text",
         "tagsColumn": "experiment,type"
       }
     ]
@@ -814,7 +814,7 @@
         "multi": false,
         "name": "event_from",
         "options": [],
-        "query": "from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.experiment == \"${experiment}\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> keep(columns: [\"_value\"])\n  |> distinct(column: \"_value\")",
+        "query": "from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.experiment == \"${experiment}\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> sort(columns: [\"_time\"])\n  |> unique(column: \"_value\")\n  |> keep(columns: [\"_value\"])",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -822,17 +822,16 @@
         "type": "query"
       },
       {
-        "allValue": "now",
         "current": {},
         "datasource": { "type": "influxdb", "uid": "influxdb" },
         "definition": "Event To",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "To Event",
         "multi": false,
         "name": "event_to",
         "options": [],
-        "query": "from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.experiment == \"${experiment}\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> keep(columns: [\"_value\"])\n  |> distinct(column: \"_value\")",
+        "query": "import \"array\"\n\nevents = from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.experiment == \"${experiment}\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> sort(columns: [\"_time\"])\n  |> unique(column: \"_value\")\n  |> keep(columns: [\"_value\"])\n\nnow_option = array.from(rows: [{_value: \"now\"}])\n\nunion(tables: [events, now_option])",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -864,7 +863,7 @@
         "multi": false,
         "name": "exp_end",
         "options": [],
-        "query": "from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.experiment == \"${experiment}\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> filter(fn: (r) => r._value == \"${event_to}\")\n  |> group()\n  |> last()\n  |> map(fn: (r) => ({_value: string(v: uint(v: r._time) / uint(v: 1000000) + uint(v: 1000))}))",
+        "query": "import \"array\"\n\nevent_time = from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.experiment == \"${experiment}\")\n  |> filter(fn: (r) => r._field == \"description\")\n  |> filter(fn: (r) => r._value == \"${event_to}\")\n  |> group()\n  |> last()\n  |> map(fn: (r) => ({_value: string(v: uint(v: r._time) / uint(v: 1000000) + uint(v: 1000))}))\n\nnow_time = array.from(rows: [{_value: string(v: uint(v: now()) / uint(v: 1000000))}])\n  |> filter(fn: (r) => \"${event_to}\" == \"now\")\n\nunion(tables: [event_time, now_time])\n  |> first()",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": true,
