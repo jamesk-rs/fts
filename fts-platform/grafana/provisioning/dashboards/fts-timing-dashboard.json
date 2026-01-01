@@ -831,7 +831,7 @@
         "multi": false,
         "name": "experiment",
         "options": [],
-        "query": "from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.type == \"start\")\n  |> keep(columns: [\"experiment\"])\n  |> distinct(column: \"experiment\")",
+        "query": "from(bucket: \"fts\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r._measurement == \"experiments\")\n  |> filter(fn: (r) => r.type == \"start\")\n  |> keep(columns: [\"_time\", \"experiment\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> unique(column: \"experiment\")\n  |> keep(columns: [\"experiment\"])",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
