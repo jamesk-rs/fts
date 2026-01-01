@@ -16,4 +16,4 @@ providers:
     disableDeletion: false
     editable: true
     options:
-      path: /etc/grafana/provisioning/dashboards/old
+      path: /etc/grafana/provisioning/dashboards-old
