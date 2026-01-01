@@ -23,6 +23,7 @@ set(COMPONENT_REQUIRES
     "ftm"
     "fts_mqtt"
     "usb_uplink"
+    "ws2812"
     "esp_netif"
     "esp_event"
 )

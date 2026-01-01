@@ -51,13 +51,22 @@ menu "Time Synchronization Configuration"
     # GPIO / TIMING
     # ========================================
     menu "GPIO and Timing"
-        config FTS_ENABLE_GPIO
+        config FTS_PULSE_MCPWM_GPIO_ENABLE
             bool "Enable GPIO Synchronization (requires MCPWM)"
             default y
             depends on SOC_MCPWM_SUPPORTED
             help
                 Enable synchronized GPIO toggling using MCPWM peripheral.
                 Requires chip with MCPWM support (ESP32-S3, not ESP32-C3).
+
+        config FTS_PULSE_MCPWM_GPIO
+            int "MCPWM Pulse Output GPIO"
+            default 7
+            range 0 48
+            depends on FTS_PULSE_MCPWM_GPIO_ENABLE
+            help
+                GPIO pin for MCPWM synchronized pulse output.
+                This outputs a 2.5kHz 20% duty cycle signal.
 
         config FTS_LED_ENABLED
             bool "Enable status LED"
@@ -76,6 +85,15 @@ menu "Time Synchronization Configuration"
                 Common values:
                 - XIAO ESP32-S3: GPIO 21 (yellow user LED)
                 - Waveshare ESP32-S3-LCD-1.47: GPIO 41
+
+        config FTS_LED_WS2812
+            bool "LED is WS2812 RGB type"
+            default n
+            depends on FTS_LED_ENABLED
+            help
+                Enable this if the LED is a WS2812/WS2818 addressable RGB LED
+                instead of a regular GPIO-controlled LED.
+                The LED will blink white at brightness 1.
 
         config FTS_MIN_PERIOD_CPU_CYCLES
             int "Minimum timer period in CPU cycles"
@@ -202,7 +220,7 @@ menu "Time Synchronization Configuration"
         config FTS_PULSE_BEFORE_ALIGN
             bool "Enable Pulse Output Before Alignment (Slave)"
             default n
-            depends on FTS_ROLE_SLAVE && FTS_ENABLE_GPIO
+            depends on FTS_ROLE_SLAVE && FTS_PULSE_MCPWM_GPIO_ENABLE
             help
                 When enabled, slave outputs MCPWM pulses immediately after timer start,
                 before synchronization with master is acquired.
