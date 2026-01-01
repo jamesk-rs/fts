@@ -70,17 +70,17 @@
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM Samples - slave1",
+      "title": "CRM Samples - ${device1}",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "samples = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n\nnew_samples = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"new_samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n\njoin(tables: {samples: samples, new_samples: new_samples}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: r._value_samples - r._value_new_samples}))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"existing\"})",
+          "query": "samples = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n\nnew_samples = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"new_samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n\njoin(tables: {samples: samples, new_samples: new_samples}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: r._value_samples - r._value_new_samples}))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"existing\"})",
           "refId": "A"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"new_samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"new\"})",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"new_samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"new\"})",
           "refId": "B"
         }
       ]
@@ -115,17 +115,17 @@
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM Samples - slave2",
+      "title": "CRM Samples - ${device2}",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "samples = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n\nnew_samples = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"new_samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n\njoin(tables: {samples: samples, new_samples: new_samples}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: r._value_samples - r._value_new_samples}))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"existing\"})",
+          "query": "samples = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n\nnew_samples = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"new_samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n\njoin(tables: {samples: samples, new_samples: new_samples}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: r._value_samples - r._value_new_samples}))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"existing\"})",
           "refId": "A"
         },
         {
           "datasource": { "type": "influxdb", "uid": "influxdb" },
-          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"new_samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"new\"})",
+          "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"new_samples\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"new\"})",
           "refId": "B"
         }
       ]
@@ -163,11 +163,11 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM R-Squared - slave1",
+      "title": "CRM R-Squared - ${device1}",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"r_squared\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"r_squared\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -197,11 +197,11 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM R-Squared - slave2",
+      "title": "CRM R-Squared - ${device2}",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"r_squared\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"r_squared\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -231,11 +231,11 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM Residual Std Dev - slave1",
+      "title": "CRM Residual Std Dev - ${device1}",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -265,11 +265,11 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM Residual Std Dev - slave2",
+      "title": "CRM Residual Std Dev - ${device2}",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"std_ns\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -306,11 +306,11 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM Clock Offset - slave1",
+      "title": "CRM Clock Offset - ${device1}",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"ppm_lr\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: \"slave1\"}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"ppm_lr\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"ppm\"})",
         "refId": "A"
       }]
     },
@@ -340,11 +340,11 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "CRM Clock Offset - slave2",
+      "title": "CRM Clock Offset - ${device2}",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"ppm_lr\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, _field: \"slave2\"}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"ppm_lr\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"ppm\"})",
         "refId": "A"
       }]
     },
@@ -381,12 +381,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Period Deviation from Nominal - slave1",
+      "title": "Period Deviation from Nominal - ${device1}",
       "description": "Period = base_period + base_period_frac/65536 - 20000 (nominal)",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "ticks = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\nfrac = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period_frac\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\njoin(tables: {ticks: ticks, frac: frac}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: float(v: r._value_ticks) + float(v: r._value_frac) / 65536.0 - 20000.0, _field: \"slave1\"}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "ticks = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\nfrac = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period_frac\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\njoin(tables: {ticks: ticks, frac: frac}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: float(v: r._value_ticks) + float(v: r._value_frac) / 65536.0 - 20000.0}))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"deviation\"})",
         "refId": "A"
       }]
     },
@@ -416,12 +416,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Period Deviation from Nominal - slave2",
+      "title": "Period Deviation from Nominal - ${device2}",
       "description": "Period = base_period + base_period_frac/65536 - 20000 (nominal)",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "ticks = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\nfrac = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period_frac\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\njoin(tables: {ticks: ticks, frac: frac}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: float(v: r._value_ticks) + float(v: r._value_frac) / 65536.0 - 20000.0, _field: \"slave2\"}))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])",
+        "query": "ticks = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\nfrac = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period_frac\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\njoin(tables: {ticks: ticks, frac: frac}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: float(v: r._value_ticks) + float(v: r._value_frac) / 65536.0 - 20000.0}))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"deviation\"})",
         "refId": "A"
       }]
     },
@@ -451,11 +451,11 @@
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Cycle Counter - slave1",
+      "title": "Cycle Counter - ${device1}",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -485,11 +485,11 @@
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Cycle Counter - slave2",
+      "title": "Cycle Counter - ${device2}",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -519,12 +519,12 @@
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Local Ticks - slave1",
+      "title": "Local Ticks - ${device1}",
       "description": "Aligned local ticks from DTC request",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"local_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"local_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -554,12 +554,12 @@
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Local Ticks - slave2",
+      "title": "Local Ticks - ${device2}",
       "description": "Aligned local ticks from DTC request",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"local_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"local_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -596,12 +596,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Period Ticks - slave1",
+      "title": "Period Ticks - ${device1}",
       "description": "Actual period applied by DTR ISR",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -631,12 +631,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Period Delta - slave1",
+      "title": "Period Delta - ${device1}",
       "description": "Change in period from previous alignment",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -666,12 +666,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Cycle Delta - slave1",
+      "title": "Cycle Delta - ${device1}",
       "description": "Change in cycle counter (normally 1)",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave1\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -701,12 +701,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Period Ticks - slave2",
+      "title": "Period Ticks - ${device2}",
       "description": "Actual period applied by DTR ISR",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -736,12 +736,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Period Delta - slave2",
+      "title": "Period Delta - ${device2}",
       "description": "Change in period from previous alignment",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"period_ticks_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     },
@@ -771,12 +771,12 @@
         "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Cycle Delta - slave2",
+      "title": "Cycle Delta - ${device2}",
       "description": "Change in cycle counter (normally 1)",
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] == \"slave2\")\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtr_feedback\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"cycle_delta\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
         "refId": "A"
       }]
     }
@@ -786,6 +786,40 @@
   "tags": ["fts", "timing", "crm", "dtr", "dtc"],
   "templating": {
     "list": [
+      {
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "definition": "Device 1",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Device 1",
+        "multi": true,
+        "name": "device1",
+        "options": [],
+        "query": "import \"array\"\n\ndevices = from(bucket: \"fts\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r._measurement == \"ftm\" or r._measurement == \"ftm_stats\" or r._measurement == \"crm_stats\")\n  |> keep(columns: [\"device\"])\n  |> distinct(column: \"device\")\n\nnone_option = array.from(rows: [{device: \"None\"}])\n\nunion(tables: [none_option, devices])\n  |> sort(columns: [\"device\"])",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "definition": "Device 2",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Device 2",
+        "multi": true,
+        "name": "device2",
+        "options": [],
+        "query": "import \"array\"\n\ndevices = from(bucket: \"fts\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r._measurement == \"ftm\" or r._measurement == \"ftm_stats\" or r._measurement == \"crm_stats\")\n  |> keep(columns: [\"device\"])\n  |> distinct(column: \"device\")\n\nnone_option = array.from(rows: [{device: \"None\"}])\n\nunion(tables: [none_option, devices])\n  |> sort(columns: [\"device\"])",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
       {
         "allValue": "__all__",
         "current": {},
