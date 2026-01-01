@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Export and import experiment annotations from InfluxDB."""
+
+import argparse
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from dotenv import load_dotenv
+
+try:
+    from influxdb_client import InfluxDBClient, Point, WritePrecision
+    from influxdb_client.client.write_api import SYNCHRONOUS
+except ImportError:
+    print("Install influxdb-client: pip install influxdb-client")
+    sys.exit(1)
+
+def get_config():
+    """Load configuration from .env file and environment."""
+    # Find project root (where .env file is)
+    script_dir = Path(__file__).parent
+    project_dir = script_dir.parent
+    env_file = project_dir / ".env"
+
+    if load_dotenv and env_file.exists():
+        load_dotenv(env_file)
+
+    # Determine InfluxDB URL
+    url = os.environ.get("INFLUX_URL")
+    if not url:
+        mqtt_bridge_host = os.environ.get("MQTT_BRIDGE_HOST")
+        if mqtt_bridge_host:
+            url = f"http://{mqtt_bridge_host}:8086"
+        else:
+            url = "http://localhost:8086"
+
+    token = os.environ.get("INFLUX_TOKEN") or os.environ.get("INFLUX_ADMIN_TOKEN", "changeme")
+    org = os.environ.get("INFLUX_ORG", "fts")
+    bucket = os.environ.get("INFLUX_BUCKET", "fts")
+
+    return url, token, org, bucket
+
+
+def export_annotations(client, bucket, filename):
+    """Export all annotations to a JSON file."""
+    query = f'''
+from(bucket: "{bucket}")
+  |> range(start: 0)
+  |> filter(fn: (r) => r._measurement == "experiments")
+  |> filter(fn: (r) => r._field == "description")
+  |> keep(columns: ["_time", "experiment", "type", "_value"])
+  |> sort(columns: ["_time"])
+'''
+    query_api = client.query_api()
+    tables = query_api.query(query)
+
+    annotations = []
+    for table in tables:
+        for record in table.records:
+            annotations.append({
+                "time": record.get_time().isoformat(),
+                "experiment": record.values.get("experiment"),
+                "type": record.values.get("type"),
+                "description": record.get_value()
+            })
+
+    with open(filename, "w") as f:
+        json.dump(annotations, f, indent=2)
+
+    print(f"Exported {len(annotations)} annotations to {filename}")
+    return len(annotations)
+
+
+def delete_all_annotations(client, org, bucket):
+    """Delete all annotations from the experiments measurement."""
+    delete_api = client.delete_api()
+
+    # Delete everything in the experiments measurement
+    start = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    stop = datetime(2100, 1, 1, tzinfo=timezone.utc)
+
+    delete_api.delete(
+        start=start,
+        stop=stop,
+        predicate='_measurement="experiments"',
+        bucket=bucket,
+        org=org
+    )
+
+
+def import_annotations(client, org, bucket, filename):
+    """Import annotations from a JSON file, replacing all existing data."""
+    # Read the file
+    with open(filename, "r") as f:
+        annotations = json.load(f)
+
+    if not isinstance(annotations, list):
+        print("Error: JSON file must contain a list of annotations")
+        sys.exit(1)
+
+    # Validate structure
+    required_fields = {"time", "experiment", "type", "description"}
+    for i, ann in enumerate(annotations):
+        if not isinstance(ann, dict):
+            print(f"Error: Item {i} is not an object")
+            sys.exit(1)
+        missing = required_fields - set(ann.keys())
+        if missing:
+            print(f"Error: Item {i} is missing fields: {missing}")
+            sys.exit(1)
+
+    # Count existing annotations before deletion
+    query = f'''
+from(bucket: "{bucket}")
+  |> range(start: 0)
+  |> filter(fn: (r) => r._measurement == "experiments")
+  |> filter(fn: (r) => r._field == "description")
+  |> count()
+'''
+    query_api = client.query_api()
+    tables = query_api.query(query)
+    existing_count = 0
+    for table in tables:
+        for record in table.records:
+            existing_count += record.get_value()
+
+    print(f"Deleting {existing_count} existing annotations...")
+    delete_all_annotations(client, org, bucket)
+
+    # Write new annotations
+    print(f"Importing {len(annotations)} annotations...")
+    write_api = client.write_api(write_options=SYNCHRONOUS)
+
+    for ann in annotations:
+        # Parse time
+        time_str = ann["time"]
+        if time_str.endswith("Z"):
+            time_str = time_str[:-1] + "+00:00"
+        ts = datetime.fromisoformat(time_str)
+
+        point = (
+            Point("experiments")
+            .tag("experiment", ann["experiment"])
+            .tag("type", ann["type"])
+            .field("description", ann["description"])
+            .time(ts, WritePrecision.NS)
+        )
+        write_api.write(bucket=bucket, record=point)
+
+    print(f"Imported {len(annotations)} annotations from {filename}")
+    return len(annotations)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Export and import experiment annotations from InfluxDB",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s export                    # Export to annotations.json
+  %(prog)s export mydata.json        # Export to custom file
+  %(prog)s import mydata.json        # Import from file (replaces all existing)
+"""
+    )
+
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show configuration")
+
+    subparsers = parser.add_subparsers(dest="command", help="Command")
+
+    # Export subcommand
+    export_parser = subparsers.add_parser("export", help="Export annotations to JSON file")
+    export_parser.add_argument("filename", nargs="?", default="annotations.json",
+                               help="Output filename (default: annotations.json)")
+
+    # Import subcommand
+    import_parser = subparsers.add_parser("import", help="Import annotations from JSON file")
+    import_parser.add_argument("filename", help="Input filename")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    url, token, org, bucket = get_config()
+
+    if args.verbose:
+        print(f"InfluxDB URL: {url}")
+        print(f"Organization: {org}")
+        print(f"Bucket: {bucket}")
+
+    try:
+        client = InfluxDBClient(url=url, token=token, org=org)
+        client.ping()
+    except Exception as e:
+        print(f"Connection failed: {e}")
+        sys.exit(1)
+
+    try:
+        if args.command == "export":
+            export_annotations(client, bucket, args.filename)
+        elif args.command == "import":
+            if not os.path.exists(args.filename):
+                print(f"Error: File not found: {args.filename}")
+                sys.exit(1)
+            import_annotations(client, org, bucket, args.filename)
+    finally:
+        client.close()
+
+
+if __name__ == "__main__":
+    main()
