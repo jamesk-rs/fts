@@ -65,6 +65,9 @@ from(bucket: "{bucket}")
                 "description": record.get_value()
             })
 
+    # Sort by time
+    annotations.sort(key=lambda x: x["time"])
+
     with open(filename, "w") as f:
         json.dump(annotations, f, indent=2)
 
