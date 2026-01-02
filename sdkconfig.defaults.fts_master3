@@ -1,0 +1,9 @@
+# Time Sync Configuration - MASTER 3 role (ESP32-S3 DevkitC1)
+CONFIG_FTS_ROLE_MASTER=y
+
+# MQTT device ID for master3
+CONFIG_FTS_MQTT_DEVICE_ID="master3"
+
+# WS2812 RGB LED on GPIO 48 (DevkitC1 board)
+CONFIG_FTS_LED_GPIO=48
+CONFIG_FTS_LED_WS2812=y
