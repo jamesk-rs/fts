@@ -212,8 +212,15 @@ class StreamingStats:
 
     @property
     def max(self) -> float:
-        """Maximum value."""
+        """Maximum value (raw)."""
         return self._max if self.count > 0 else 0.0
+
+    @property
+    def max_deviation(self) -> float:
+        """Maximum absolute deviation from mean (max jitter)."""
+        if len(self._reservoir) == 0:
+            return 0.0
+        return max(abs(v - self._mean) for v in self._reservoir)
 
     def percentile(self, p: float) -> float:
         """
@@ -245,6 +252,7 @@ class StreamingStats:
             'std': self.std,
             'min': self.min,
             'max': self.max,
+            'max_jitter': self.max_deviation,
             'p50': self.percentile(50),
             'p95': self.percentile(95),
             'p99': self.percentile(99),

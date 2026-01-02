@@ -162,6 +162,7 @@ class SDRPublisher:
             "std_ns": stats.get('std_ns', 0.0),
             "min_ns": stats.get('min_ns', 0.0),
             "max_ns": stats.get('max_ns', 0.0),
+            "max_jitter_ns": stats.get('max_jitter_ns', 0.0),
             "p50_ns": stats.get('p50_ns', 0.0),
             "p95_ns": stats.get('p95_ns', 0.0),
             "p99_ns": stats.get('p99_ns', 0.0),

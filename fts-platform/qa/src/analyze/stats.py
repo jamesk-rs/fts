@@ -11,28 +11,30 @@ from typing import Optional
 class JitterStats:
     """Container for jitter statistics."""
     count: int
-    mean_ns: float
-    std_ns: float
-    min_ns: float
-    max_ns: float
-    p50_ns: float
-    p95_ns: float
-    p99_ns: float
-    p999_ns: float  # 99.9th percentile
+    mean_ns: float          # mean delay (offset)
+    std_ns: float           # std of delay
+    min_ns: float           # min delay (raw)
+    max_ns: float           # max delay (raw)
+    max_jitter_ns: float    # max |delay - mean| (max jitter)
+    p50_ns: float           # 50th percentile of |delay - mean|
+    p95_ns: float           # 95th percentile of |delay - mean|
+    p99_ns: float           # 99th percentile of |delay - mean|
+    p999_ns: float          # 99.9th percentile of |delay - mean|
     phase_mean_deg: Optional[float] = None
     phase_std_deg: Optional[float] = None
 
     def __str__(self) -> str:
         lines = [
             f"Jitter Statistics (n={self.count})",
-            f"  Mean:   {self.mean_ns:+.3f} ns",
-            f"  Std:    {self.std_ns:.3f} ns",
-            f"  Min:    {self.min_ns:+.3f} ns",
-            f"  Max:    {self.max_ns:+.3f} ns",
-            f"  P50:    ±{self.p50_ns:.3f} ns",
-            f"  P95:    ±{self.p95_ns:.3f} ns",
-            f"  P99:    ±{self.p99_ns:.3f} ns",
-            f"  P99.9:  ±{self.p999_ns:.3f} ns",
+            f"  Mean:       {self.mean_ns:+.3f} ns",
+            f"  Std:        {self.std_ns:.3f} ns",
+            f"  Min:        {self.min_ns:+.3f} ns",
+            f"  Max:        {self.max_ns:+.3f} ns",
+            f"  Max Jitter: ±{self.max_jitter_ns:.3f} ns",
+            f"  P50:        ±{self.p50_ns:.3f} ns",
+            f"  P95:        ±{self.p95_ns:.3f} ns",
+            f"  P99:        ±{self.p99_ns:.3f} ns",
+            f"  P99.9:      ±{self.p999_ns:.3f} ns",
         ]
         return "\n".join(lines)
 
@@ -44,6 +46,7 @@ class JitterStats:
             'std_ns': self.std_ns,
             'min_ns': self.min_ns,
             'max_ns': self.max_ns,
+            'max_jitter_ns': self.max_jitter_ns,
             'p50_ns': self.p50_ns,
             'p95_ns': self.p95_ns,
             'p99_ns': self.p99_ns,
@@ -86,6 +89,7 @@ def compute_stats(
         std_ns=float(np.std(delays_ns)),
         min_ns=float(np.min(delays_ns)),
         max_ns=float(np.max(delays_ns)),
+        max_jitter_ns=float(np.max(deviation_ns)),
         p50_ns=float(np.percentile(deviation_ns, 50)),
         p95_ns=float(np.percentile(deviation_ns, 95)),
         p99_ns=float(np.percentile(deviation_ns, 99)),
