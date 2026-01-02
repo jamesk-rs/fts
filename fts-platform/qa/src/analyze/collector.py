@@ -155,41 +155,48 @@ class EdgeCollector:
         # Match edges and optionally publish
         self._match_edges(pulse_freq)
 
-        # Add to current bucket (or start new one)
-        current_time = chunk_gpsdo_time
-        current_minute = int(current_time) // 60
+        # Add edges to buckets based on EDGE time (not chunk time)
+        # This ensures edges are attributed to the correct minute even when
+        # a chunk spans a minute boundary
+        self._add_edge_to_bucket(times_a, 'a')
+        self._add_edge_to_bucket(times_b, 'b')
 
-        # Handle minute boundary
-        if self._current_bucket is not None:
-            if current_minute > self._current_bucket.minute_epoch:
-                # Minute boundary crossed - enqueue current bucket
-                self._bucket_queue.put(self._current_bucket)
-                self._current_bucket = None
+    def _add_edge_to_bucket(self, times: np.ndarray, channel: str) -> None:
+        """
+        Add edges to the appropriate bucket based on edge time.
 
-        # Start new bucket if needed
-        if self._current_bucket is None:
-            if not self._first_minute_dropped:
-                # Drop first incomplete minute
-                self._first_minute_dropped = True
-                print(f"  Dropping incomplete minute (starting at :{int(current_time) % 60:02d}s)")
+        Handles bucket transitions when edges cross minute boundaries.
+        """
+        for t in times:
+            # Compute edge's absolute GPSDO time and minute
+            edge_gpsdo_time = self._gpsdo_start_time + t
+            edge_minute = int(edge_gpsdo_time) // 60
+
+            # Handle bucket transition if edge is in a new minute
+            if self._current_bucket is not None:
+                if edge_minute > self._current_bucket.minute_epoch:
+                    # Minute boundary crossed - enqueue current bucket
+                    self._bucket_queue.put(self._current_bucket)
+                    self._current_bucket = None
+
+            # Create new bucket if needed
+            if self._current_bucket is None:
+                if not self._first_minute_dropped:
+                    # Drop first incomplete minute
+                    self._first_minute_dropped = True
+                    print(f"  Dropping incomplete minute (starting at :{int(edge_gpsdo_time) % 60:02d}s)")
+                    continue  # Skip edges in the dropped minute
+                else:
+                    self._current_bucket = MinuteBucket(
+                        minute_epoch=edge_minute,
+                        sample_rate=self._sample_rate,
+                    )
+
+            # Add edge to current bucket
+            if channel == 'a':
+                self._current_bucket.edges_a.append(t)
             else:
-                self._current_bucket = MinuteBucket(
-                    minute_epoch=current_minute,
-                    sample_rate=self._sample_rate,
-                )
-
-        # Add edges to current bucket
-        if self._current_bucket is not None:
-            # Convert bucket boundaries to relative times for comparison
-            bucket_start_rel = self._current_bucket.start_time - self._gpsdo_start_time
-            bucket_end_rel = self._current_bucket.end_time - self._gpsdo_start_time
-
-            for t in times_a:
-                if bucket_start_rel <= t < bucket_end_rel:
-                    self._current_bucket.edges_a.append(t)
-            for t in times_b:
-                if bucket_start_rel <= t < bucket_end_rel:
-                    self._current_bucket.edges_b.append(t)
+                self._current_bucket.edges_b.append(t)
 
     def _match_edges(self, pulse_freq: float) -> None:
         """Match edges using two-pointer merge algorithm."""
@@ -222,8 +229,12 @@ class EdgeCollector:
                 self._matched_total += 1
 
                 # Store delay in current bucket for stats computation
-                if self._current_bucket is not None:
-                    self._current_bucket.delays.append(diff)
+                # Only store if the edge falls within this bucket's time range
+                if self._current_bucket is not None and self._gpsdo_start_time is not None:
+                    edge_gpsdo_time = self._gpsdo_start_time + a
+                    edge_minute = int(edge_gpsdo_time) // 60
+                    if edge_minute == self._current_bucket.minute_epoch:
+                        self._current_bucket.delays.append(diff)
 
                 if self._on_edge:
                     delay_ns = diff * 1e9
