@@ -1,0 +1,5 @@
+#!/bin/sh -x
+
+for sensor in gps_gpgga gps_servo gps_time gps_gprmc gps_locked ref_locked ; do
+	uhd_usrp_probe --args "addr=192.168.10.2"   --sensor mboards/0/sensors/$sensor 2>&1 | grep -v '^\[INFO\]'
+done
