@@ -40,7 +40,7 @@ class SDRPublisher:
         self,
         mqtt_host: str = "localhost",
         mqtt_port: int = 1883,
-        topic: str = "fts/sdr/edges",
+        topic: str = "sdr/edges",
         client_id: Optional[str] = None,
     ):
         """
@@ -137,7 +137,7 @@ class SDRPublisher:
         stats: dict,
         overflow_count: int = 0,
         channel_stats: dict = None,
-        topic: str = "fts/sdr/stats",
+        topic: str = "sdr/stats",
     ) -> bool:
         """
         Publish rolling window statistics to MQTT.
@@ -146,7 +146,7 @@ class SDRPublisher:
             stats: Dictionary with stats (from JitterStats.to_dict())
             overflow_count: UHD buffer overflow count
             channel_stats: Per-channel edge statistics (channel_a_edges, channel_b_edges)
-            topic: MQTT topic for stats (default: fts/sdr/stats)
+            topic: MQTT topic for stats (default: sdr/stats)
 
         Returns:
             True if published successfully
@@ -183,7 +183,7 @@ class SDRPublisher:
         self,
         phase_noise: dict,
         timestamp: float,
-        topic: str = "fts/sdr/phase_noise",
+        topic: str = "sdr/phase_noise",
     ) -> bool:
         """
         Publish phase noise data to MQTT.
@@ -191,7 +191,7 @@ class SDRPublisher:
         Args:
             phase_noise: Dictionary from PhaseNoiseResult.to_dict()
             timestamp: Timestamp for this measurement (minute boundary)
-            topic: MQTT topic for phase noise (default: fts/sdr/phase_noise)
+            topic: MQTT topic for phase noise (default: sdr/phase_noise)
 
         Returns:
             True if published successfully

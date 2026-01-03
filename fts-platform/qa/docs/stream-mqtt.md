@@ -5,8 +5,8 @@ This document describes how `stream-mqtt` accumulates edges, matches them betwee
 ## Overview
 
 `stream-mqtt` captures IQ samples from a USRP SDR, detects signal edges on both channels (I and Q), matches corresponding edges between channels to compute delays, and publishes:
-1. **Raw edges** to `fts/sdr/edges` (~2000/sec at 2kHz pulse rate)
-2. **Rolling window stats** to `fts/sdr/stats` (every 10 seconds)
+1. **Raw edges** to `sdr/edges` (~2000/sec at 2kHz pulse rate)
+2. **Rolling window stats** to `sdr/stats` (every 10 seconds)
 
 ## Data Flow
 
@@ -30,10 +30,10 @@ USRP (10 MSps)
       Edge Detection    Edge Matching    Stats (every 10s)
             │                 │                 │
             ▼                 ▼                 ▼
-     all_falling_a/b     all_delays      MQTT: fts/sdr/stats
+     all_falling_a/b     all_delays      MQTT: sdr/stats
                               │
                               ▼
-                      MQTT: fts/sdr/edges
+                      MQTT: sdr/edges
 ```
 
 ## Processing Stages
@@ -169,7 +169,7 @@ Returns:
 
 ## MQTT Output
 
-### Raw Edges: `fts/sdr/edges`
+### Raw Edges: `sdr/edges`
 
 Published per-chunk (~20 edges every 10ms = ~2000/sec):
 
@@ -182,7 +182,7 @@ Published per-chunk (~20 edges every 10ms = ~2000/sec):
 }
 ```
 
-### Stats: `fts/sdr/stats`
+### Stats: `sdr/stats`
 
 Published every 10 seconds:
 

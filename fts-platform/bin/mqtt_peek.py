@@ -21,7 +21,7 @@ TOPIC_PATTERNS = {
     "ftm": "fts/+/ftm",
     "ftm_stats": "fts/+/ftm_stats",
     "metrics": "fts/+/metrics",
-    "edges": "fts/sdr/edges",
+    "edges": "sdr/edges",
     "all": "fts/#",
 }
 

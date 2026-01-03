@@ -31,7 +31,9 @@ max_keepalive 120
 # Bridge to cloud
 connection fts-cloud
 address ${MQTT_BRIDGE_HOST}:${MQTT_BRIDGE_PORT}
-topic fts/# out 1
+topic sdr/# out 1
+topic fts_ts/# out 1
+topic health/# out 1
 cleansession false
 notifications false
 restart_timeout 10

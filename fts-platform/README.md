@@ -31,45 +31,7 @@ Set `COMPOSE_PROFILES` in `.env` to select:
 | `split-local` | Lab side of split setup (Mosquitto + stream-mqtt) |
 | `split-cloud` | Cloud side of split setup (full TIG stack) |
 
-### Local Setup
-
-Everything runs on a single machine. Use this for development or when all hardware (ESP32, SDR) is connected to the same host.
-
-```
-┌─────────────────────────────────────────┐
-│              Local Host                 │
-│                                         │
-│  ESP32 ──┐                              │
-│          ├─► Mosquitto ─► Telegraf      │
-│  SDR ────┤                    │         │
-│          ▼                    ▼         │
-│    stream-mqtt           InfluxDB       │
-│                              │          │
-│                              ▼          │
-│                           Grafana       │
-└─────────────────────────────────────────┘
-```
-
-### Split Setup
-
-Lab equipment stays local, TIG stack runs in the cloud. MQTT messages are bridged over the internet with authentication. Handles unreliable connections - messages queue locally during outages.
-
-```
-LAB (Shuttle PC)                         CLOUD (LXC/VM)
-┌─────────────────────┐                  ┌─────────────────────┐
-│  ESP32 ──┐          │                  │                     │
-│          ├─► Mosquitto ═══════════════►│ Mosquitto (auth)    │
-│  SDR ────┤     │    │   MQTT bridge    │      │              │
-│          ▼     │    │   (encrypted)    │      ▼              │
-│   stream-mqtt  │    │                  │   Telegraf          │
-│                │    │                  │      │              │
-│           queue on  │                  │      ▼              │
-│           disconnect│                  │   InfluxDB          │
-│                     │                  │      │              │
-│                     │                  │      ▼              │
-│                     │                  │   Grafana           │
-└─────────────────────┘                  └─────────────────────┘
-```
+See DATAFLOW.md for more details.
 
 ## Installation
 
@@ -240,7 +202,9 @@ open http://localhost:3000
 - `fts/{device_id}/metrics` - Timing metrics
 
 ### SDR → Platform
-- `fts/sdr/edges` - Edge timing data
+- `sdr/edges` - Edge timing data
+- `sdr/stats` - Rolling window statistics
+- `sdr/phase_noise` - Phase noise measurements
 
 ### Platform → Device
 - `fts/{device_id}/control` - Remote control (draft implementation)
