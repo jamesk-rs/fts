@@ -237,6 +237,24 @@
   "templating": {
     "list": [
       {
+        "allValue": "",
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "influxdb" },
+        "definition": "Site",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Site",
+        "multi": false,
+        "name": "site",
+        "options": [],
+        "query": "from(bucket: \"health\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"cpu\")\n  |> keep(columns: [\"site\"])\n  |> distinct(column: \"site\")",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
         "allValue": "__all__",
         "current": {},
         "datasource": { "type": "influxdb", "uid": "influxdb" },
