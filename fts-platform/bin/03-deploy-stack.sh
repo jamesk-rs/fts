@@ -105,6 +105,13 @@ fi
 DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
 export DOCKER_GID
 
+# Persist DOCKER_GID in .env if not already set
+if grep -q '^# *DOCKER_GID=' .env 2>/dev/null; then
+    sed -i "s/^# *DOCKER_GID=.*/DOCKER_GID=$DOCKER_GID/" .env
+elif ! grep -q '^DOCKER_GID=' .env 2>/dev/null; then
+    echo "DOCKER_GID=$DOCKER_GID" >> .env
+fi
+
 # Create required directories
 echo "Setting up directories..."
 mkdir -p grafana/provisioning/dashboards
