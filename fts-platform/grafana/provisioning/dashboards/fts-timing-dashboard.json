@@ -310,7 +310,7 @@
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"ppm_lr\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"ppm\"})",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"ppm_lr\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"device\"])\n  |> keep(columns: [\"_time\", \"_value\", \"device\"])",
         "refId": "A"
       }]
     },
@@ -344,7 +344,7 @@
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"ppm_lr\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"ppm\"})",
+        "query": "from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"crm_stats\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"ppm_lr\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"device\"])\n  |> keep(columns: [\"_time\", \"_value\", \"device\"])",
         "refId": "A"
       }]
     },
@@ -386,7 +386,7 @@
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "ticks = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\nfrac = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period_frac\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\njoin(tables: {ticks: ticks, frac: frac}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: float(v: r._value_ticks) + float(v: r._value_frac) / 65536.0 - 20000.0}))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"deviation\"})",
+        "query": "ticks = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\nfrac = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device1:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period_frac\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\njoin(tables: {ticks: ticks, frac: frac}, on: [\"_time\", \"device\"])\n  |> map(fn: (r) => ({_time: r._time, device: r.device, _value: float(v: r._value_ticks) + float(v: r._value_frac) / 65536.0 - 20000.0}))\n  |> group(columns: [\"device\"])\n  |> keep(columns: [\"_time\", \"_value\", \"device\"])",
         "refId": "A"
       }]
     },
@@ -421,7 +421,7 @@
       "type": "timeseries",
       "targets": [{
         "datasource": { "type": "influxdb", "uid": "influxdb" },
-        "query": "ticks = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\nfrac = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period_frac\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\njoin(tables: {ticks: ticks, frac: frac}, on: [\"_time\"])\n  |> map(fn: (r) => ({_time: r._time, _value: float(v: r._value_ticks) + float(v: r._value_frac) / 65536.0 - 20000.0}))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> rename(columns: {_value: \"deviation\"})",
+        "query": "ticks = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\nfrac = from(bucket: \"fts\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"dtc_request\")\n  |> filter(fn: (r) => r[\"device\"] =~ /^${device2:regex}$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"base_period_frac\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n\njoin(tables: {ticks: ticks, frac: frac}, on: [\"_time\", \"device\"])\n  |> map(fn: (r) => ({_time: r._time, device: r.device, _value: float(v: r._value_ticks) + float(v: r._value_frac) / 65536.0 - 20000.0}))\n  |> group(columns: [\"device\"])\n  |> keep(columns: [\"_time\", \"_value\", \"device\"])",
         "refId": "A"
       }]
     },
