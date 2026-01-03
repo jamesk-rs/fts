@@ -375,7 +375,7 @@
         "multi": false,
         "name": "site",
         "options": [],
-        "query": "from(bucket: \"health\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"cpu\")\n  |> keep(columns: [\"site\"])\n  |> distinct(column: \"site\")",
+        "query": "import \"influxdata/influxdb/schema\"\n\nschema.tagValues(bucket: \"health\", tag: \"site\")",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
