@@ -7,9 +7,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLATFORM_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Auto-detect docker socket GID for telegraf container
-export DOCKER_GID="${DOCKER_GID:-$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 124)}"
-
 cd "$PLATFORM_DIR"
 
 # Source .env to get COMPOSE_PROFILES
