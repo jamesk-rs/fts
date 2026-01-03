@@ -18,7 +18,7 @@ services:
 
   influxdb:
     profiles: ["local", "split-cloud"]
-    image: influxdb:2.7
+    image: influxdb:2
     ports:
       - "8086:8086"
     environment:
@@ -73,7 +73,7 @@ services:
 
   grafana:
     profiles: ["local", "split-cloud"]
-    image: grafana/grafana
+    image: grafana/grafana:11.5.0
     ports:
       - "3000:3000"
     environment:
