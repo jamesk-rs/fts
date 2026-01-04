@@ -69,6 +69,7 @@ class ChunkProcessor:
         # Collector with bucket processing
         self._collector = EdgeCollector(
             sample_rate=sample_rate,
+            pulse_freq=pulse_freq,
             on_bucket_complete=self._process_bucket,
             on_edge=on_edge,
         )
