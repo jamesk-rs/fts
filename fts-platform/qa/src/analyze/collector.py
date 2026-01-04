@@ -22,7 +22,7 @@ class MinuteBucket:
     """Edges collected during one complete minute."""
 
     minute_epoch: int  # GPS minute (unix timestamp // 60)
-    edges_a: list[float] = field(default_factory=list)  # Edge GPS times
+    edges_a: list[float] = field(default_factory=list)  # Edge times (relative seconds from stream start)
     edges_b: list[float] = field(default_factory=list)
     delays: list[float] = field(default_factory=list)  # Matched delays in seconds
     sample_rate: float = 10e6
@@ -138,28 +138,37 @@ class EdgeCollector:
         if self._gpsdo_start is None:
             self._gpsdo_start = chunk_gpsdo_time - (chunk_sample_offset / self._sample_rate)
 
-        # Convert sample indices to GPS times
-        gps_a = self._gpsdo_start + falling_a / self._sample_rate
-        gps_b = self._gpsdo_start + falling_b / self._sample_rate
+        # Convert sample indices to RELATIVE times (seconds from stream start)
+        # Using relative times avoids float precision loss with large GPS timestamps
+        # (GPS time ~1.77e9 would lose nanosecond precision in float64)
+        times_a = falling_a / self._sample_rate
+        times_b = falling_b / self._sample_rate
 
-        self._edges_a_total += len(gps_a)
-        self._edges_b_total += len(gps_b)
+        self._edges_a_total += len(times_a)
+        self._edges_b_total += len(times_b)
 
-        # Add to matching queues
-        self._queue_a.extend(gps_a.tolist())
-        self._queue_b.extend(gps_b.tolist())
+        # Add to matching queues (relative times for precision)
+        self._queue_a.extend(times_a.tolist())
+        self._queue_b.extend(times_b.tolist())
 
         # Real-time matching
         self._match_edges()
 
         # Add edges to buckets and handle minute transitions
-        for t in gps_a:
+        for t in times_a:
             self._add_edge_to_bucket(t, 'a')
-        for t in gps_b:
+        for t in times_b:
             self._add_edge_to_bucket(t, 'b')
 
-    def _add_edge_to_bucket(self, gps_time: float, channel: str) -> None:
-        """Add edge to appropriate bucket, handling minute transitions."""
+    def _add_edge_to_bucket(self, rel_time: float, channel: str) -> None:
+        """Add edge to appropriate bucket, handling minute transitions.
+
+        Args:
+            rel_time: Relative time (seconds from stream start)
+            channel: 'a' or 'b'
+        """
+        # Convert to GPS time only for minute calculation
+        gps_time = self._gpsdo_start + rel_time
         edge_minute = int(gps_time) // 60
 
         # Initialize on first edge
@@ -184,11 +193,11 @@ class EdgeCollector:
                 sample_rate=self._sample_rate,
             )
 
-        # Add edge to current bucket
+        # Add edge to current bucket (store relative time for precision)
         if channel == 'a':
-            self._current_bucket.edges_a.append(gps_time)
+            self._current_bucket.edges_a.append(rel_time)
         else:
-            self._current_bucket.edges_b.append(gps_time)
+            self._current_bucket.edges_b.append(rel_time)
 
     def _match_edges(self) -> None:
         """Match edges using two-pointer algorithm with real-time publishing."""
@@ -219,25 +228,29 @@ class EdgeCollector:
                 self._matched_total += 1
 
                 # Real-time callback (delays computed at minute end in processor)
+                # a, b are relative times; convert to GPS time for timestamp
                 if self._on_edge and self._gpsdo_start is not None:
-                    ch_a_ns = int((a - self._gpsdo_start) * 1e9)
-                    ch_b_ns = int((b - self._gpsdo_start) * 1e9)
-                    self._on_edge(a, diff * 1e9, ch_a_ns, ch_b_ns)
+                    gps_time = self._gpsdo_start + a
+                    ch_a_ns = int(a * 1e9)  # Relative ns from stream start
+                    ch_b_ns = int(b * 1e9)
+                    self._on_edge(gps_time, diff * 1e9, ch_a_ns, ch_b_ns)
 
             elif diff > 0:
                 # B is later - A missed its match
                 self._queue_a.popleft()
                 self._unmatched_a_total += 1
                 if self._on_edge and self._gpsdo_start is not None:
-                    ch_a_ns = int((a - self._gpsdo_start) * 1e9)
-                    self._on_edge(a, None, ch_a_ns, None)
+                    gps_time = self._gpsdo_start + a
+                    ch_a_ns = int(a * 1e9)
+                    self._on_edge(gps_time, None, ch_a_ns, None)
             else:
                 # A is later - B missed its match
                 self._queue_b.popleft()
                 self._unmatched_b_total += 1
                 if self._on_edge and self._gpsdo_start is not None:
-                    ch_b_ns = int((b - self._gpsdo_start) * 1e9)
-                    self._on_edge(b, None, None, ch_b_ns)
+                    gps_time = self._gpsdo_start + b
+                    ch_b_ns = int(b * 1e9)
+                    self._on_edge(gps_time, None, None, ch_b_ns)
 
     def _finalize_bucket(self) -> None:
         """Finalize current bucket and enqueue for stats processing."""
@@ -247,14 +260,16 @@ class EdgeCollector:
         # Drain remaining edges in queue for this minute (bypass safety buffer)
         # Match any edge A that belongs to this minute, even if B is in next minute
         bucket_minute = self._current_bucket.minute_epoch
-        bucket_end = (bucket_minute + 1) * 60
+        # Convert bucket_end to relative time for comparison with queue values
+        bucket_end_gps = (bucket_minute + 1) * 60
+        bucket_end_rel = bucket_end_gps - self._gpsdo_start
 
         while self._queue_a and self._queue_b:
-            a = self._queue_a[0]
+            a = self._queue_a[0]  # Relative time
             b = self._queue_b[0]
 
             # Stop if A edge is in the next minute (nothing left for this bucket)
-            if a >= bucket_end:
+            if a >= bucket_end_rel:
                 break
 
             diff = b - a
@@ -265,9 +280,10 @@ class EdgeCollector:
                 self._matched_total += 1
 
                 if self._on_edge and self._gpsdo_start is not None:
-                    ch_a_ns = int((a - self._gpsdo_start) * 1e9)
-                    ch_b_ns = int((b - self._gpsdo_start) * 1e9)
-                    self._on_edge(a, diff * 1e9, ch_a_ns, ch_b_ns)
+                    gps_time = self._gpsdo_start + a
+                    ch_a_ns = int(a * 1e9)
+                    ch_b_ns = int(b * 1e9)
+                    self._on_edge(gps_time, diff * 1e9, ch_a_ns, ch_b_ns)
             elif diff > 0:
                 self._queue_a.popleft()
                 self._unmatched_a_total += 1
