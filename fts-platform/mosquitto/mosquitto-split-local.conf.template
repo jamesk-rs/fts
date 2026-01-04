@@ -11,9 +11,8 @@ protocol websockets
 # Local access is unauthenticated (ESP32, stream-mqtt)
 allow_anonymous true
 
-persistence true
-persistence_location /mosquitto/data/
-autosave_interval 60
+# Persistence disabled - autosave blocks the broker causing message delays
+persistence false
 
 # Queue settings for bridge (when cloud is down)
 # 0 = unlimited (bounded by disk space only)
