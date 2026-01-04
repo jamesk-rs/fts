@@ -1,16 +1,15 @@
 """
 Edge collection with minute-aligned buckets.
 
-Simplified architecture:
-- EdgeBuffer: stores edges with GPS timestamps
-- MinuteAggregator: matches edges when minute is complete
-- EdgeCollector: coordinates buffering and aggregation
-
-Processing is offloaded to a background thread.
+Real-time edge matching with minute-based statistics:
+- Edges matched immediately as they arrive (for real-time MQTT publishing)
+- Delays stored in minute buckets for stats computation
+- Unmatched edges tracked with grace window at minute boundaries
 """
 
 import queue
 import threading
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, Optional
@@ -60,127 +59,19 @@ class CollectorStatus:
     current_minute: Optional[str] = None
 
 
-class EdgeBuffer:
-    """
-    Simple edge storage with minute-based retrieval.
-
-    Stores edges as (gps_time, channel) and allows extracting
-    all edges for a completed minute.
-    """
-
-    def __init__(self):
-        # Separate lists for efficiency (avoid channel checks during iteration)
-        self._edges_a: list[float] = []
-        self._edges_b: list[float] = []
-
-    def add_edges(self, gps_times_a: np.ndarray, gps_times_b: np.ndarray) -> None:
-        """Store edges with their GPS timestamps."""
-        self._edges_a.extend(gps_times_a.tolist())
-        self._edges_b.extend(gps_times_b.tolist())
-
-    def pop_minute(self, minute_epoch: int) -> tuple[list[float], list[float]]:
-        """Extract and remove all edges belonging to a specific minute."""
-        start = minute_epoch * 60
-        end = start + 60
-
-        # Extract edges in this minute
-        edges_a = [t for t in self._edges_a if start <= t < end]
-        edges_b = [t for t in self._edges_b if start <= t < end]
-
-        # Remove extracted edges (keep edges outside this minute)
-        self._edges_a = [t for t in self._edges_a if not (start <= t < end)]
-        self._edges_b = [t for t in self._edges_b if not (start <= t < end)]
-
-        return edges_a, edges_b
-
-    def clear_before(self, gps_time: float) -> None:
-        """Remove all edges before a given time (cleanup)."""
-        self._edges_a = [t for t in self._edges_a if t >= gps_time]
-        self._edges_b = [t for t in self._edges_b if t >= gps_time]
-
-
-class MinuteAggregator:
-    """
-    Match edges and compute stats for completed minutes.
-
-    Uses two-pointer algorithm on sorted edge lists.
-    Only counts unmatched edges in the "core" region (not near boundaries).
-    """
-
-    def __init__(self, pulse_freq: float):
-        self._pulse_freq = pulse_freq
-        self._max_delay = 0.1 / pulse_freq  # 10% of period for matching
-        self._grace = 1.0 / pulse_freq       # 1 period grace at boundaries
-
-    def process_minute(
-        self, minute_epoch: int, edges_a: list[float], edges_b: list[float]
-    ) -> tuple[MinuteBucket, int, int]:
-        """
-        Match edges and create bucket with delays.
-
-        Returns:
-            (bucket, unmatched_a_core, unmatched_b_core)
-
-        Unmatched counts only include edges in the "core" region
-        (not within 1 period of minute boundaries) to avoid false alarms.
-        """
-        start = minute_epoch * 60
-        end = start + 60
-        core_start = start + self._grace
-        core_end = end - self._grace
-
-        # Sort both lists
-        edges_a = sorted(edges_a)
-        edges_b = sorted(edges_b)
-
-        # Two-pointer matching
-        delays = []
-        matched_a = set()
-        matched_b = set()
-        i, j = 0, 0
-
-        while i < len(edges_a) and j < len(edges_b):
-            diff = edges_b[j] - edges_a[i]
-            if abs(diff) <= self._max_delay:
-                delays.append(diff)
-                matched_a.add(i)
-                matched_b.add(j)
-                i += 1
-                j += 1
-            elif diff > 0:
-                # B is later - A has no match
-                i += 1
-            else:
-                # A is later - B has no match
-                j += 1
-
-        # Count unmatched in core region only (avoid boundary false alarms)
-        unmatched_a = sum(
-            1 for idx, t in enumerate(edges_a)
-            if idx not in matched_a and core_start <= t < core_end
-        )
-        unmatched_b = sum(
-            1 for idx, t in enumerate(edges_b)
-            if idx not in matched_b and core_start <= t < core_end
-        )
-
-        bucket = MinuteBucket(
-            minute_epoch=minute_epoch,
-            edges_a=edges_a,
-            edges_b=edges_b,
-            delays=delays,
-        )
-        return bucket, unmatched_a, unmatched_b
-
-
 class EdgeCollector:
     """
-    Coordinates edge buffering and minute-based aggregation.
+    Real-time edge matching with minute-aligned statistics.
+
+    Edges are matched immediately as they arrive, with on_edge callback
+    for real-time MQTT publishing. Delays are accumulated in minute buckets
+    for stats computation.
 
     Main thread:
     - Receives edges via add_edges()
-    - Buffers in EdgeBuffer
-    - On minute completion: extracts edges, runs aggregation, enqueues result
+    - Matches edges in real-time, calls on_edge()
+    - Stores delays in current bucket
+    - On minute boundary: enqueues bucket for stats processing
 
     Processing thread:
     - Dequeues completed buckets
@@ -194,30 +85,25 @@ class EdgeCollector:
         on_bucket_complete: Callable[[MinuteBucket], None],
         on_edge: Optional[Callable[[float, float, Optional[float], Optional[float]], None]] = None,
     ):
-        """
-        Initialize edge collector.
-
-        Args:
-            sample_rate: Sample rate in Hz
-            pulse_freq: Pulse frequency in Hz (for matching threshold)
-            on_bucket_complete: Called from processing thread when minute complete
-            on_edge: Optional callback for batched edge publishing at minute end
-                     (gpsdo_time, delay_ns or None, ch_a_ns or None, ch_b_ns or None)
-        """
         self._sample_rate = sample_rate
         self._pulse_freq = pulse_freq
         self._on_bucket_complete = on_bucket_complete
         self._on_edge = on_edge
 
-        # Components
-        self._buffer = EdgeBuffer()
-        self._aggregator = MinuteAggregator(pulse_freq)
+        # Matching parameters
+        self._max_match_delay = 0.1 / pulse_freq  # 10% of period
+        self._safety_buffer = 0.5 / pulse_freq    # Wait for late edges
+        self._grace = 1.0 / pulse_freq            # Boundary grace for unmatched
 
-        # State
+        # Edge matching queues (deque for O(1) popleft)
+        self._queue_a: deque[float] = deque()
+        self._queue_b: deque[float] = deque()
+
+        # Current bucket
+        self._current_bucket: Optional[MinuteBucket] = None
         self._gpsdo_start: Optional[float] = None
         self._last_completed_minute: int = -1
         self._first_minute_dropped = False
-        self._current_minute_epoch: Optional[int] = None
 
         # Stats tracking
         self._samples_processed = 0
@@ -243,17 +129,10 @@ class EdgeCollector:
         falling_b: np.ndarray,
         chunk_gpsdo_time: float,
         chunk_sample_offset: int,
-        pulse_freq: float,  # Kept for API compatibility, but we use self._pulse_freq
+        pulse_freq: float,
     ) -> None:
         """
-        Add edges from current chunk.
-
-        Args:
-            falling_a: Falling edge sample indices (cumulative from stream start)
-            falling_b: Falling edge sample indices (cumulative from stream start)
-            chunk_gpsdo_time: GPSDO time of first sample in this chunk
-            chunk_sample_offset: Sample index of first sample in this chunk
-            pulse_freq: Pulse frequency (unused, kept for compatibility)
+        Add edges from current chunk with real-time matching.
         """
         # Initialize GPSDO start time from first chunk
         if self._gpsdo_start is None:
@@ -266,56 +145,143 @@ class EdgeCollector:
         self._edges_a_total += len(gps_a)
         self._edges_b_total += len(gps_b)
 
-        # Buffer edges
-        self._buffer.add_edges(gps_a, gps_b)
+        # Add to matching queues
+        self._queue_a.extend(gps_a.tolist())
+        self._queue_b.extend(gps_b.tolist())
 
-        # Determine current minute from latest edge
-        if len(gps_a) > 0 or len(gps_b) > 0:
-            latest_gps = max(
-                gps_a[-1] if len(gps_a) > 0 else 0,
-                gps_b[-1] if len(gps_b) > 0 else 0
+        # Real-time matching
+        self._match_edges()
+
+        # Add edges to buckets and handle minute transitions
+        for t in gps_a:
+            self._add_edge_to_bucket(t, 'a')
+        for t in gps_b:
+            self._add_edge_to_bucket(t, 'b')
+
+    def _add_edge_to_bucket(self, gps_time: float, channel: str) -> None:
+        """Add edge to appropriate bucket, handling minute transitions."""
+        edge_minute = int(gps_time) // 60
+
+        # Initialize on first edge
+        if self._last_completed_minute == -1:
+            self._last_completed_minute = edge_minute - 1
+
+        # Handle bucket transition
+        if self._current_bucket is not None:
+            if edge_minute > self._current_bucket.minute_epoch:
+                # Minute boundary crossed - finalize current bucket
+                self._finalize_bucket()
+
+        # Create new bucket if needed
+        if self._current_bucket is None:
+            if not self._first_minute_dropped:
+                self._first_minute_dropped = True
+                start_second = int(self._gpsdo_start) % 60
+                print(f"  Dropping incomplete minute (starting at :{start_second:02d}s)")
+                # Still need to create bucket to track edges, just won't publish it
+            self._current_bucket = MinuteBucket(
+                minute_epoch=edge_minute,
+                sample_rate=self._sample_rate,
             )
-            current_minute = int(latest_gps) // 60
-            self._current_minute_epoch = current_minute
 
-            # Process any completed minutes (all minutes before current)
-            while self._last_completed_minute < current_minute - 1:
-                minute_to_process = self._last_completed_minute + 1
+        # Add edge to current bucket
+        if channel == 'a':
+            self._current_bucket.edges_a.append(gps_time)
+        else:
+            self._current_bucket.edges_b.append(gps_time)
 
-                if not self._first_minute_dropped:
-                    # Drop first incomplete minute
-                    self._first_minute_dropped = True
-                    start_second = int(self._gpsdo_start) % 60
-                    print(f"  Dropping incomplete minute (starting at :{start_second:02d}s)")
-                else:
-                    self._complete_minute(minute_to_process)
+    def _match_edges(self) -> None:
+        """Match edges using two-pointer algorithm with real-time publishing."""
+        if not self._queue_a or not self._queue_b:
+            return
 
-                self._last_completed_minute = minute_to_process
-
-    def _complete_minute(self, minute_epoch: int) -> None:
-        """Finalize a completed minute."""
-        # Extract edges for this minute
-        edges_a, edges_b = self._buffer.pop_minute(minute_epoch)
-
-        # Match and aggregate
-        bucket, unmatched_a, unmatched_b = self._aggregator.process_minute(
-            minute_epoch, edges_a, edges_b
+        # Safety buffer: don't match edges too close to newest data
+        newest = max(
+            self._queue_a[-1] if self._queue_a else 0,
+            self._queue_b[-1] if self._queue_b else 0
         )
+        safe_cutoff = newest - self._safety_buffer
 
-        # Update stats
-        self._matched_total += len(bucket.delays)
-        self._unmatched_a_total += unmatched_a
-        self._unmatched_b_total += unmatched_b
+        while self._queue_a and self._queue_b:
+            a = self._queue_a[0]
+            b = self._queue_b[0]
 
-        # Emit per-edge events if callback provided (batched)
-        if self._on_edge:
-            for i, delay in enumerate(bucket.delays):
-                # Use approximate GPS time (edge_a time)
-                gps_time = edges_a[i] if i < len(edges_a) else minute_epoch * 60
-                self._on_edge(gps_time, delay * 1e9, None, None)
+            # Don't process edges too close to newest data
+            if a > safe_cutoff or b > safe_cutoff:
+                break
 
-        # Enqueue for background processing
-        self._bucket_queue.put(bucket)
+            diff = b - a  # positive = B is later
+
+            if abs(diff) <= self._max_match_delay:
+                # Match found
+                self._queue_a.popleft()
+                self._queue_b.popleft()
+                self._matched_total += 1
+
+                # Real-time callback (delays computed at minute end in processor)
+                if self._on_edge and self._gpsdo_start is not None:
+                    ch_a_ns = int((a - self._gpsdo_start) * 1e9)
+                    ch_b_ns = int((b - self._gpsdo_start) * 1e9)
+                    self._on_edge(a, diff * 1e9, ch_a_ns, ch_b_ns)
+
+            elif diff > 0:
+                # B is later - A missed its match
+                self._queue_a.popleft()
+                self._unmatched_a_total += 1
+                if self._on_edge and self._gpsdo_start is not None:
+                    ch_a_ns = int((a - self._gpsdo_start) * 1e9)
+                    self._on_edge(a, None, ch_a_ns, None)
+            else:
+                # A is later - B missed its match
+                self._queue_b.popleft()
+                self._unmatched_b_total += 1
+                if self._on_edge and self._gpsdo_start is not None:
+                    ch_b_ns = int((b - self._gpsdo_start) * 1e9)
+                    self._on_edge(b, None, None, ch_b_ns)
+
+    def _finalize_bucket(self) -> None:
+        """Finalize current bucket and enqueue for stats processing."""
+        if self._current_bucket is None:
+            return
+
+        # Drain remaining edges in queue for this minute (bypass safety buffer)
+        # Match any edge A that belongs to this minute, even if B is in next minute
+        bucket_minute = self._current_bucket.minute_epoch
+        bucket_end = (bucket_minute + 1) * 60
+
+        while self._queue_a and self._queue_b:
+            a = self._queue_a[0]
+            b = self._queue_b[0]
+
+            # Stop if A edge is in the next minute (nothing left for this bucket)
+            if a >= bucket_end:
+                break
+
+            diff = b - a
+
+            if abs(diff) <= self._max_match_delay:
+                self._queue_a.popleft()
+                self._queue_b.popleft()
+                self._matched_total += 1
+
+                if self._on_edge and self._gpsdo_start is not None:
+                    ch_a_ns = int((a - self._gpsdo_start) * 1e9)
+                    ch_b_ns = int((b - self._gpsdo_start) * 1e9)
+                    self._on_edge(a, diff * 1e9, ch_a_ns, ch_b_ns)
+            elif diff > 0:
+                self._queue_a.popleft()
+                self._unmatched_a_total += 1
+            else:
+                self._queue_b.popleft()
+                self._unmatched_b_total += 1
+
+        # Skip the first (incomplete) minute
+        is_first_minute = self._last_completed_minute == int(self._gpsdo_start) // 60 - 1
+        if not is_first_minute:
+            self._bucket_queue.put(self._current_bucket)
+
+        self._last_completed_minute = self._current_bucket.minute_epoch
+        self._current_bucket = None
 
     def update_samples(self, samples: int) -> None:
         """Update samples processed count."""
@@ -328,10 +294,8 @@ class EdgeCollector:
     def get_status(self) -> CollectorStatus:
         """Get current status for console output."""
         minute_str = None
-        if self._current_minute_epoch is not None:
-            minute_str = datetime.utcfromtimestamp(
-                self._current_minute_epoch * 60
-            ).strftime("%H:%M")
+        if self._current_bucket is not None:
+            minute_str = self._current_bucket.minute_str
 
         return CollectorStatus(
             samples_processed=self._samples_processed,
@@ -359,19 +323,13 @@ class EdgeCollector:
                 continue
 
     def flush(self) -> None:
-        """Flush current minute (for clean shutdown)."""
-        if self._current_minute_epoch is not None:
-            # Process current (possibly incomplete) minute
-            edges_a, edges_b = self._buffer.pop_minute(self._current_minute_epoch)
-            if edges_a or edges_b:
-                bucket, _, _ = self._aggregator.process_minute(
-                    self._current_minute_epoch, edges_a, edges_b
-                )
-                self._matched_total += len(bucket.delays)
-                self._bucket_queue.put(bucket)
+        """Flush current bucket (for clean shutdown)."""
+        if self._current_bucket is not None:
+            self._bucket_queue.put(self._current_bucket)
+            self._current_bucket = None
 
     def stop(self) -> None:
         """Stop processing thread."""
         self._stop_event.set()
-        self._bucket_queue.put(None)  # Sentinel to wake up thread
+        self._bucket_queue.put(None)
         self._processing_thread.join(timeout=2.0)

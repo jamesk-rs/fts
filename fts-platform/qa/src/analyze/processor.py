@@ -105,18 +105,51 @@ class ChunkProcessor:
 
     def _process_bucket(self, bucket: MinuteBucket) -> None:
         """Called from processing thread for completed minute."""
-        # Use pre-matched delays from collector (avoids GIL-blocking re-match)
-        if len(bucket.delays) < 10:
-            print(f"[MINUTE {bucket.minute_str}] Too few matches: {len(bucket.delays)}")
+        # Compute delays from edge lists (fixes boundary loss bug)
+        delays = self._compute_delays(bucket.edges_a, bucket.edges_b)
+
+        if len(delays) < 10:
+            print(f"[MINUTE {bucket.minute_str}] Too few matches: {len(delays)}")
             return
 
-        delays = np.array(bucket.delays)
-        stats = compute_stats(delays, self._pulse_freq)
+        delays_arr = np.array(delays)
+        stats = compute_stats(delays_arr, self._pulse_freq)
 
         # Compute phase noise FFT
-        phase_noise = compute_phase_noise(delays, self._pulse_freq)
+        phase_noise = compute_phase_noise(delays_arr, self._pulse_freq)
 
         self._on_minute_stats(bucket, stats, phase_noise)
+
+    def _compute_delays(self, edges_a: list[float], edges_b: list[float]) -> list[float]:
+        """
+        Compute delays using two-pointer matching on sorted edge lists.
+
+        This is called at minute end on complete edge lists, avoiding
+        the boundary loss bug that occurred with incremental storage.
+        """
+        if not edges_a or not edges_b:
+            return []
+
+        # Sort to ensure correct matching order
+        sorted_a = sorted(edges_a)
+        sorted_b = sorted(edges_b)
+
+        max_delay = 0.1 / self._pulse_freq  # 10% of period
+        delays = []
+        i, j = 0, 0
+
+        while i < len(sorted_a) and j < len(sorted_b):
+            diff = sorted_b[j] - sorted_a[i]
+            if abs(diff) <= max_delay:
+                delays.append(diff)
+                i += 1
+                j += 1
+            elif diff > 0:
+                i += 1  # A has no match
+            else:
+                j += 1  # B has no match
+
+        return delays
 
     def set_overflow_count(self, count: int) -> None:
         """Update overflow count from USRP capture."""
