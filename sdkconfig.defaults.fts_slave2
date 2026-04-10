@@ -1,9 +1,0 @@
-# Time Sync Configuration - SLAVE 2 role
-CONFIG_FTS_ROLE_SLAVE=y
-
-# MQTT device ID for slave and enable RL control
-CONFIG_FTS_MQTT_DEVICE_ID="slave2"
-CONFIG_FTS_MQTT_ENABLE_CONTROL=y
-
-# Waveshare ESP32-S3-LCD-1.47 LED pin
-CONFIG_FTS_LED_GPIO=41

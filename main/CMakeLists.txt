@@ -11,7 +11,6 @@ execute_process(
         -DCMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/build_info.cmake
 )
-
 set(MAIN_SRCS "fts_main.c")
 
 # Component requirements for fts_main.c
@@ -22,7 +21,6 @@ set(COMPONENT_REQUIRES
     "dtc"
     "ftm"
     "fts_mqtt"
-    "usb_uplink"
     "ws2812"
     "esp_netif"
     "esp_event"

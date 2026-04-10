@@ -1,8 +1,0 @@
-# Time Sync Configuration - MASTER role
-CONFIG_FTS_ROLE_MASTER=y
-
-# MQTT device ID for master
-CONFIG_FTS_MQTT_DEVICE_ID="master"
-
-# XIAO ESP32-S3 LED pin
-CONFIG_FTS_LED_GPIO=21

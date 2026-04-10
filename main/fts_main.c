@@ -4,6 +4,8 @@
  * Demonstrates synchronized measurements using FTS framework.
  */
 
+#include "fts_main.h"
+
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -18,16 +20,16 @@
 #include "dtr.h"
 #include "build_info.h"
 
+
+#define LDO_EN_GPIO 17
+#define RF_PATH_GPIO 11
+
 #ifdef CONFIG_FTS_LED_WS2812
 #include "ws2812.h"
 #endif
 
-#if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP) || defined(CONFIG_FTS_MODE_USB_NCM)
+#if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP)
 #include "ftm.h"
-#endif
-
-#ifdef CONFIG_FTS_MODE_USB_NCM
-#include "usb_uplink.h"
 #endif
 
 #ifdef CONFIG_FTS_ROLE_SLAVE
@@ -50,7 +52,7 @@ static const char *TAG = "fts_main";
 #ifdef CONFIG_FTS_PULSE_MCPWM_GPIO
 #define TOGGLE_GPIO CONFIG_FTS_PULSE_MCPWM_GPIO
 #else
-#define TOGGLE_GPIO GPIO_NUM_7
+#define TOGGLE_GPIO GPIO_NUM_7 //Put the pulses out on GPIO5
 #endif
 
 #if defined(CONFIG_FTS_MQTT_ENABLED) && defined(CONFIG_FTS_MQTT_ENABLE_CONTROL)
@@ -93,7 +95,6 @@ static void ws2812_task(void *arg)
         } else if (bits & WS2812_LED_OFF_BIT) {
             led_on = false;
         }
-
         ws2812_set_color(0, led_on ? 255 : 0, led_on ? 255 : 0, led_on ? 255 : 0);
         ws2812_show();
     }
@@ -123,7 +124,7 @@ static void IRAM_ATTR fts_callback(uint32_t master_cycle)
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 #else
         // Regular GPIO LED (active low)
-        gpio_set_level(CONFIG_FTS_LED_GPIO, led_on ? 0 : 1);
+        gpio_set_level(CONFIG_1PPS_LED_GPIO, led_on ? 0 : 1);
 #endif
     }
 #endif
@@ -131,19 +132,26 @@ static void IRAM_ATTR fts_callback(uint32_t master_cycle)
 
 void app_main(void)
 {
-#ifdef CONFIG_FTS_MODE_USB_NCM
-    // USB-NCM mode: Initialize USB FIRST - before anything else including NVS
-    // Some boards (e.g., Waveshare) need USB init within tight timing window
-    ESP_ERROR_CHECK(usb_uplink_init());
+    gpio_config_t ldo_en_conf = {
+        .pin_bit_mask = (1ULL << LDO_EN_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&ldo_en_conf);
+    gpio_set_level(LDO_EN_GPIO, 1);  //ldo on
 
-    // Now init NVS (needed for WiFi later)
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-#endif
+        gpio_config_t rf_path_conf = {
+        .pin_bit_mask = (1ULL << RF_PATH_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&rf_path_conf);
+    gpio_set_level(RF_PATH_GPIO, 1);  // direct wifi out of u.fl connector
+
 
     ESP_LOGI(TAG, "FTS built %s - %s - %s",
              BUILD_TIMESTAMP,
@@ -153,37 +161,35 @@ void app_main(void)
 #ifdef CONFIG_FTS_LED_ENABLED
 #ifdef CONFIG_FTS_LED_WS2812
     // Initialize WS2812 RGB LED
-    ESP_ERROR_CHECK(ws2812_init(CONFIG_FTS_LED_GPIO, 1, 1));  // brightness=1
-    ws2812_set_color(0, 0, 0, 0);  // Start with LED off
+    ESP_ERROR_CHECK(ws2812_init(CONFIG_1PPS_LED_GPIO, 1, 255));  // brightness=1
+    ws2812_set_color(0, 100, 100, 100);  // White to start, to show it's working
     ws2812_show();
+    ESP_LOGI(TAG, "Set LED to white");
 
     // Create event group and task for LED updates
     ws2812_event_group = xEventGroupCreate();
     xTaskCreate(ws2812_task, "ws2812", 2048, NULL, 1, NULL);
-    ESP_LOGI(TAG, "WS2812 LED initialized on GPIO %d", CONFIG_FTS_LED_GPIO);
+    ESP_LOGI(TAG, "WS2812 LED initialized on GPIO %d", CONFIG_1PPS_LED_GPIO);
 #else
     // Initialize regular GPIO LED
     gpio_config_t led_conf = {
-        .pin_bit_mask = (1ULL << CONFIG_FTS_LED_GPIO),
+        .pin_bit_mask = (1ULL << CONFIG_1PPS_LED_GPIO),
         .mode = GPIO_MODE_OUTPUT,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&led_conf);
-    gpio_set_level(CONFIG_FTS_LED_GPIO, 1);  // LED off (active low)
+    gpio_set_level(CONFIG_1PPS_LED_GPIO, 1);  // LED off (active low)
 #endif
 #endif
 
 #ifdef CONFIG_FTS_ROLE_SLAVE
-    // ========== SLAVE MODE ==========
+    // ========== SLAVE MODE INIT ==========
 
 #if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP)
     // WiFi mode: Initialize WiFi STA with FTM initiator (starts WiFi and MAC clock)
     ESP_ERROR_CHECK(ftm_slave_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD));
-#elif defined(CONFIG_FTS_MODE_USB_NCM)
-    // WiFi for ESP-NOW sync + FTM (USB already initialized above)
-    ESP_ERROR_CHECK(ftm_slave_espnow_init(CONFIG_FTS_ESPNOW_CHANNEL));
 #endif
 
     // Initialize DTR (MCPWM timer hardware)
@@ -203,8 +209,6 @@ void app_main(void)
     ESP_LOGI(TAG, "Waiting for IP address...");
 #if defined(CONFIG_FTS_MODE_INTERNAL_AP) || defined(CONFIG_FTS_MODE_EXTERNAL_AP)
     esp_err_t ip_err = ftm_wait_for_ip(10000);
-#elif defined(CONFIG_FTS_MODE_USB_NCM)
-    esp_err_t ip_err = usb_uplink_wait_for_ip(30000);  // USB may take longer
 #endif
     if (ip_err != ESP_OK) {
         ESP_LOGW(TAG, "Timeout waiting for IP, MQTT may fail initially");
@@ -226,7 +230,7 @@ void app_main(void)
 #endif // CONFIG_FTS_MQTT_ENABLED
 
 #elif defined(CONFIG_FTS_ROLE_MASTER)
-    // ========== MASTER MODE ==========
+    // ========== MASTER MODE INIT ==========
 
 #if defined(CONFIG_FTS_MODE_INTERNAL_AP)
     // Internal AP mode: Master creates its own network
@@ -234,10 +238,6 @@ void app_main(void)
 #elif defined(CONFIG_FTS_MODE_EXTERNAL_AP)
     // External AP mode: Master connects to external WiFi like slaves
     ESP_ERROR_CHECK(ftm_master_sta_init(CONFIG_FTS_WIFI_SSID, CONFIG_FTS_WIFI_PASSWORD));
-#elif defined(CONFIG_FTS_MODE_USB_NCM)
-    // USB-NCM mode: WiFi for ESP-NOW sync + FTM responder
-    // (USB already initialized at start of app_main)
-    ESP_ERROR_CHECK(ftm_master_espnow_init(CONFIG_FTS_ESPNOW_CHANNEL));
 #endif
 
     // Initialize DTR (MCPWM timer hardware)
@@ -254,12 +254,6 @@ void app_main(void)
 #if defined(CONFIG_FTS_MODE_EXTERNAL_AP)
     ESP_LOGI(TAG, "Waiting for IP address...");
     esp_err_t ip_err = ftm_wait_for_ip(10000);
-    if (ip_err != ESP_OK) {
-        ESP_LOGW(TAG, "Timeout waiting for IP, MQTT may fail initially");
-    }
-#elif defined(CONFIG_FTS_MODE_USB_NCM)
-    ESP_LOGI(TAG, "Waiting for USB IP address...");
-    esp_err_t ip_err = usb_uplink_wait_for_ip(30000);  // USB may take longer
     if (ip_err != ESP_OK) {
         ESP_LOGW(TAG, "Timeout waiting for IP, MQTT may fail initially");
     }
@@ -281,4 +275,19 @@ void app_main(void)
     #error "CONFIG_FTS_ROLE_MASTER or CONFIG_FTS_ROLE_SLAVE must be defined"
 #endif
     ESP_LOGI(TAG, "FTS started");
+
+    //Set the RTC to start accepting pulses and start getting it in sync
+
+    //Wait 10 seconds, then turn off wifi
+    vTaskDelay(pdMS_TO_TICKS(10000));
+
+    //Disable the RTC from accepting sync pulses, set it to rely on its own clock
+
+    //Change the output pulse being monitored to come from the RTC
+
+    //De-init the FTM function and rely on the RTC instead
+    ESP_LOGI(TAG, "10s passed. deinit ftm and watch the drift...");
+    ftm_deinit();
+
+    //Now watch the pulses and see how far out they go...
 }
